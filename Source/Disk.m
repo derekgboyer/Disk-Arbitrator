@@ -10,6 +10,7 @@
 #import "AppError.h"
 #import <DiskArbitration/DiskArbitration.h>
 #import "DiskArbitrationPrivateFunctions.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <sys/param.h>
 #include <sys/mount.h>
 
@@ -177,7 +178,7 @@
 	// ensure arg list is NULL terminated
 	id __unsafe_unretained *argv = calloc(args.count + 1, sizeof(id));
 	if (args.count > 0)
-		[args getObjects:argv];
+		[args getObjects:argv range:NSMakeRange(0, args.count)];
 
 	NSURL *url = path ? [NSURL fileURLWithPath:path.stringByExpandingTildeInPath] : NULL;
 
@@ -354,7 +355,8 @@
 		}
 	}
 
-	NSImage *generic = [[NSWorkspace sharedWorkspace] iconForFileType:@"public.volume"];
+	UTType *volumeType = [UTType typeWithIdentifier:@"public.volume"];
+	NSImage *generic = volumeType ? [[NSWorkspace sharedWorkspace] iconForContentType:volumeType] : nil;
 	if (!generic)
 		generic = [NSImage imageNamed:NSImageNameFolder];
 	icon = [generic retain];

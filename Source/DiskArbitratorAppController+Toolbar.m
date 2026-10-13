@@ -8,13 +8,15 @@
 
 #import "DiskArbitratorAppController+Toolbar.h"
 #import "Disk.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 
 @implementation AppController (AppControllerToolbar)
 
 - (NSImage *)attachDiskImageIcon
 {
-	NSImage *dmgIcon = [[NSWorkspace sharedWorkspace] iconForFileType:@"dmg"];
+	UTType *diskImageType = [UTType typeWithFilenameExtension:@"dmg"];
+	NSImage *dmgIcon = diskImageType ? [[NSWorkspace sharedWorkspace] iconForContentType:diskImageType] : nil;
 	NSImage *plugImage = [NSImage imageNamed:@"ToolbarItem Attach Disk Plug"];
 
 	return [NSImage imageWithSize:NSMakeSize(32, 32) flipped:NO drawingHandler:^BOOL(NSRect dstRect) {
