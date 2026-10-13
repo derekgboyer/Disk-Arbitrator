@@ -16,19 +16,12 @@
 {
 	NSImage *dmgIcon = [[NSWorkspace sharedWorkspace] iconForFileType:@"dmg"];
 	NSImage *plugImage = [NSImage imageNamed:@"ToolbarItem Attach Disk Plug"];
-	
-	NSBitmapImageRep *compositedImage = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:32 pixelsHigh:32 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:0 bitsPerPixel:0];
 
-	[NSGraphicsContext saveGraphicsState];
-	[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:compositedImage]];
-	[[NSGraphicsContext currentContext] setShouldAntialias:NO];
-	
-	[dmgIcon drawInRect:NSMakeRect(0, 0, 32, 32) fromRect:NSZeroRect operation:NSCompositingOperationCopy fraction:1.0];
-	[plugImage drawInRect:NSMakeRect(2, 16, 16, 16) fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1.0];
-	
-	[NSGraphicsContext restoreGraphicsState];
-
-	return [[NSImage alloc] initWithData:[compositedImage TIFFRepresentation]];
+	return [NSImage imageWithSize:NSMakeSize(32, 32) flipped:NO drawingHandler:^BOOL(NSRect dstRect) {
+		[dmgIcon drawInRect:dstRect];
+		[plugImage drawInRect:NSMakeRect(2, 16, 16, 16)];
+		return YES;
+	}];
 }
 
 - (NSToolbarItem *)toolbar:(NSToolbar *)toolbar itemForItemIdentifier:(NSString *)itemIdentifier willBeInsertedIntoToolbar:(BOOL)flag

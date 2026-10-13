@@ -14,6 +14,12 @@
 #import "SheetController.h"
 #import "DiskInfoController.h"
 #import "AttachDiskImageController.h"
+#import <ServiceManagement/ServiceManagement.h>
+#include <unistd.h>
+#include <errno.h>
+
+static NSString * const LaunchAgentPlistName = @"us.burghardt.Disk-Arbitrator.plist";
+static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -21,6 +27,7 @@
 {
 	NSMutableArray *displayErrorQueue; //
 	NSMutableArray *diskInfoControllers;
+	id userActivity;
 }
 
 @end
@@ -79,14 +86,31 @@
 	
 	displayErrorQueue = [NSMutableArray new];
 	
+	// App Nap or sudden termination would delay or kill the mount-approval callback and
+	// let diskarbitrationd mount the volume read-write.
+	userActivity = [[NSProcessInfo processInfo] beginActivityWithOptions:(NSActivityUserInitiated | NSActivityLatencyCritical)
+	                                                               reason:@"Respond immediately to disk mount requests"];
+	[[NSProcessInfo processInfo] disableSuddenTermination];
+
 	NSStatusBar *bar = [NSStatusBar systemStatusBar];
 	self.statusItem = [bar statusItemWithLength:NSSquareStatusItemLength];
     NSImage *altImage = [[NSImage imageNamed:@"StatusItem Disabled 1.png"] copy];
     [altImage setTemplate:YES];
     self.statusItem.button.alternateImage = altImage;
-    [self.statusItem.button.cell setHighlightsBy:NSNoCellMask];
+	NSButtonCell *statusButtonCell = (NSButtonCell *)self.statusItem.button.cell;
+	if ([statusButtonCell isKindOfClass:[NSButtonCell class]])
+		statusButtonCell.highlightsBy = NSNoCellMask;
 	[self setStatusItemIconWithName:@"StatusItem Disabled 1"];
 	statusItem.menu = statusMenu;
+
+	NSInteger preferencesIndex = [statusMenu indexOfItemWithTarget:self andAction:@selector(showPreferences:)];
+	if (preferencesIndex != NSNotFound) {
+		NSMenuItem *accessItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Full Disk Access…", nil)
+		                                                     action:@selector(showFullDiskAccessHelp:)
+		                                              keyEquivalent:@""];
+		accessItem.target = self;
+		[statusMenu insertItem:accessItem atIndex:preferencesIndex + 1];
+	}
 	
 	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 	[center addObserver:self selector:@selector(diskDidChange:) name:DADiskDidChangeNotification object:nil];
@@ -98,6 +122,10 @@
 	[arbitrator addObserver:self forKeyPath:@"isActivated" options:0 context:NULL];
 	[arbitrator addObserver:self forKeyPath:@"mountMode" options:0 context:NULL];
 	[self refreshStatusItemIcon];  // arbitrator status initial state is taken from user defaults, which was initialized before KVO initialized
+
+	Log(LOG_INFO, @"Disk Arbitrator %@ running. activated=%d mode=%ld",
+		[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"],
+		(int)arbitrator.isActivated, (long)arbitrator.mountMode);
 
 	self.sortDescriptors = [NSArray arrayWithObject:[[NSSortDescriptor alloc] initWithKey:@"BSDNameNumber" ascending:YES]];
 	
@@ -127,13 +155,13 @@
 - (IBAction)showAboutPanel:(id)sender
 {
 	[NSApp orderFrontStandardAboutPanel:sender];
-	[NSApp activateIgnoringOtherApps:YES];
+	ActivateDiskArbitratorApp();
 }
 
 - (IBAction)showMainWindow:(id)sender
 {
 	[window makeKeyAndOrderFront:sender];
-	[NSApp activateIgnoringOtherApps:YES];
+	ActivateDiskArbitratorApp();
 }
 
 - (IBAction)showPreferences:(id)sender
@@ -144,7 +172,7 @@
 		controller = [[NSWindowController alloc] initWithWindowNibName:@"Preferences"];
 
 	[controller.window makeKeyAndOrderFront:self];
-	[NSApp activateIgnoringOtherApps:YES];
+	ActivateDiskArbitratorApp();
 }
 
 - (IBAction)performActivation:(id)sender
@@ -356,6 +384,11 @@
 
 #pragma mark Launch Agent
 
+- (SMAppService *)launchAgentService
+{
+	return [SMAppService agentServiceWithPlistName:LaunchAgentPlistName];
+}
+
 - (NSString *)userLaunchAgentPath {
 
 	NSString *path = nil;
@@ -368,10 +401,35 @@
 	return  path;
 }
 
+- (BOOL)legacyLaunchAgentInstalled
+{
+	NSString *path = self.userLaunchAgentPath;
+	return path.length > 0 && [[NSFileManager defaultManager] fileExistsAtPath:path];
+}
+
+- (void)removeLegacyLaunchAgentPlist
+{
+	NSString *path = self.userLaunchAgentPath;
+	if (path.length == 0)
+		return;
+	[[NSFileManager defaultManager] removeItemAtPath:path error:NULL];
+}
+
+- (void)bootoutLaunchAgent
+{
+	// Drops a job loaded from ~/Library/LaunchAgents. SMAppService jobs use the same label.
+	// bootout can quit this process when launchd started it; KeepAlive on the new agent starts it again.
+	NSTask *task = [[NSTask alloc] init];
+	task.executableURL = [NSURL fileURLWithPath:@"/bin/launchctl"];
+	task.arguments = @[ @"bootout", [NSString stringWithFormat:@"gui/%d/%@", getuid(), LaunchAgentLabel] ];
+	if ([task launchAndReturnError:NULL])
+		[task waitUntilExit];
+}
+
 - (void)refreshLaunchAgentStatus {
-	NSFileManager *fm = [NSFileManager defaultManager];
-	
-	self.hasUserLaunchAgent = [fm fileExistsAtPath:self.userLaunchAgentPath];
+	SMAppServiceStatus status = self.launchAgentService.status;
+	BOOL registered = (status == SMAppServiceStatusEnabled || status == SMAppServiceStatusRequiresApproval);
+	self.hasUserLaunchAgent = registered || [self legacyLaunchAgentInstalled];
 	if (self.hasUserLaunchAgent)
 		self.installUserLaunchAgentMenuTitle = @"Uninstall User Launch Agent...";
 	else
@@ -382,46 +440,71 @@
 	return (self.hasUserLaunchAgent == NO);
 }
 
-- (IBAction)installUserLaunchAgent:(id)sender {
-	NSError *error;
-	NSAlert *alert = nil;
-	NSString *dstPath;
-	NSFileManager *fm = [NSFileManager defaultManager];
+- (void)showFullDiskAccessHelp:(id)sender
+{
+	ActivateDiskArbitratorApp();
 
-	[NSApp activateIgnoringOtherApps:YES];
+	NSAlert *alert = [[NSAlert alloc] init];
+	alert.messageText = NSLocalizedString(@"Full Disk Access", nil);
+	alert.informativeText = NSLocalizedString(@"Mount blocking uses a Disk Arbitration approval callback and does not itself require Full Disk Access. Grant it if the disk list stays empty, Get Info cannot read a volume, or you image disks from this Mac. macOS will not prompt; add Disk Arbitrator in System Settings > Privacy & Security > Full Disk Access, then quit and reopen it.", nil);
+	[alert addButtonWithTitle:NSLocalizedString(@"Open Full Disk Access Settings", nil)];
+	[alert addButtonWithTitle:NSLocalizedString(@"Close", nil)];
+	if ([alert runModal] == NSAlertFirstButtonReturn) {
+		NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles"];
+		[[NSWorkspace sharedWorkspace] openURL:url
+		                          configuration:[NSWorkspaceOpenConfiguration configuration]
+		                      completionHandler:nil];
+	}
+}
+
+- (IBAction)installUserLaunchAgent:(id)sender {
+	NSError *error = nil;
+	NSAlert *alert = nil;
+	SMAppService *service = self.launchAgentService;
+
+	ActivateDiskArbitratorApp();
 
 	if (self.hasUserLaunchAgent) {
-
-		dstPath = self.userLaunchAgentPath;
-		
-		if ([fm removeItemAtPath:dstPath error:&error] == YES) {
-            alert = [[NSAlert alloc] init];
-            alert.messageText = @"Launch Agent removed. Changes will take effect on next login.";
+		BOOL hadLegacy = [self legacyLaunchAgentInstalled];
+		[self removeLegacyLaunchAgentPlist];
+		NSError *unregisterError = nil;
+		BOOL unregistered = [service unregisterAndReturnError:&unregisterError];
+		if (hadLegacy)
+			[self bootoutLaunchAgent];
+		if (unregistered || hadLegacy) {
+			alert = [[NSAlert alloc] init];
+			alert.messageText = NSLocalizedString(@"Launch Agent removed.", nil);
+			alert.informativeText = NSLocalizedString(@"Disk Arbitrator will no longer start at login. If it quits now, launchd is dropping the old job.", nil);
 		}
-		else {
-			alert = [NSAlert alertWithError:error];
+		else if (unregisterError) {
+			alert = [NSAlert alertWithError:unregisterError];
 		}
 	}
 	else {
-		NSMutableDictionary *dict = [NSMutableDictionary dictionary];
-		[dict setObject:@"us.burghardt.Disk-Arbitrator" forKey:@"Label"];
-		[dict setObject:[NSArray arrayWithObject:[[NSBundle mainBundle] executablePath]] forKey:@"ProgramArguments"];
-		[dict setObject:[NSNumber numberWithBool:NO] forKey:@"Disabled"];
-		[dict setObject:[NSNumber numberWithBool:YES] forKey:@"EnableTransactions"];
-		[dict setObject:[NSNumber numberWithBool:YES] forKey:@"KeepAlive"];
-		
-		dstPath = [self userLaunchAgentPath];
-		
-		NSData *plistData;
-		plistData = [NSPropertyListSerialization dataWithPropertyList:dict format:NSPropertyListXMLFormat_v1_0 options:0 error:&error];
-		if (!plistData) {
+		// A plist left in ~/Library/LaunchAgents uses an absolute path and fights SMAppService for the same label.
+		// Don't bootout here: if launchd started this process, bootout would kill it before register returns.
+		BOOL hadLegacy = [self legacyLaunchAgentInstalled];
+		[self removeLegacyLaunchAgentPlist];
+
+		if ([service registerAndReturnError:&error]) {
+			alert = [[NSAlert alloc] init];
+			alert.messageText = NSLocalizedString(@"Launch Agent installed.", nil);
+			if (service.status == SMAppServiceStatusRequiresApproval) {
+				alert.informativeText = NSLocalizedString(@"macOS requires approval before the agent can run. In System Settings > General > Login Items, allow Disk Arbitrator. The agent relaunches the app if it quits.", nil);
+				[alert addButtonWithTitle:NSLocalizedString(@"Open Login Items", nil)];
+				[alert addButtonWithTitle:NSLocalizedString(@"Close", nil)];
+				if ([alert runModal] == NSAlertFirstButtonReturn)
+					[SMAppService openSystemSettingsLoginItems];
+				alert = nil;
+			}
+			else {
+				alert.informativeText = NSLocalizedString(@"launchd will open Disk Arbitrator at login and relaunch it if it quits. Copy the app to /Applications before installing so the agent keeps finding it.", nil);
+			}
+		}
+		else if (error) {
 			alert = [NSAlert alertWithError:error];
-		} else {
-			if (![plistData writeToFile:dstPath options:NSDataWritingAtomic error:&error]) {
-				alert = [NSAlert alertWithError:error];
-			} else {
-				alert = [[NSAlert alloc] init];
-				alert.messageText = @"Launch Agent installed. Changes will take effect on next login.";
+			if (hadLegacy) {
+				alert.informativeText = NSLocalizedString(@"The previous Launch Agent file was removed, but launchd may still have the old job loaded. Log out and back in, then install the Launch Agent again.", nil);
 			}
 		}
 	}
@@ -491,7 +574,7 @@
 // A custom cell is used for the media description column.  Couldn't find a way to bind it to the disk
 // object, so implemented the dataSource delegate.
 
-- (id)tableView:(NSTableView *)tv objectValueForTableColumn:(NSTableColumn *)column row:(int)rowIndex
+- (id)tableView:(NSTableView *)tv objectValueForTableColumn:(NSTableColumn *)column row:(NSInteger)rowIndex
 {
     Disk *disk;
 	
@@ -505,11 +588,13 @@
 	return disk;
 }
 
-- (NSDragOperation)tableView:(NSTableView*)tv validateDrop:(id <NSDraggingInfo>)info proposedRow:(int)row proposedDropOperation:(NSTableViewDropOperation)op
+- (NSDragOperation)tableView:(NSTableView*)tv validateDrop:(id <NSDraggingInfo>)info proposedRow:(NSInteger)row proposedDropOperation:(NSTableViewDropOperation)op
 {
-    Log(LOG_DEBUG, @"%s op: %ld info: %@", __func__, op, info);
+    Log(LOG_DEBUG, @"%s op: %ld info: %@", __func__, (long)op, info);
 
-	NSURL *file = [NSURL URLFromPasteboard:info.draggingPasteboard];
+	NSArray<NSURL *> *files = [info.draggingPasteboard readObjectsForClasses:@[[NSURL class]]
+	                                                                  options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+	NSURL *file = files.firstObject;
 
 	if ( file ) {
 		NSArray *extensions = [AttachDiskImageController diskImageFileExtensions];
@@ -542,11 +627,13 @@
 }
 
 - (BOOL)tableView:(NSTableView *)aTableView acceptDrop:(id <NSDraggingInfo>)info
-			  row:(int)row dropOperation:(NSTableViewDropOperation)operation
+			  row:(NSInteger)row dropOperation:(NSTableViewDropOperation)operation
 {
 	Log(LOG_DEBUG, @"%s", __func__);
 
-	NSURL *file = [NSURL URLFromPasteboard:info.draggingPasteboard];
+	NSArray<NSURL *> *files = [info.draggingPasteboard readObjectsForClasses:@[[NSURL class]]
+	                                                                  options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+	NSURL *file = files.firstObject;
 	if ( file ) {
 		Log(LOG_DEBUG, @"file: %@", file);
 		dispatch_async(dispatch_get_main_queue(), ^{
@@ -590,6 +677,24 @@
 	}		
 }
 
+- (void)presentDiskError:(NSError *)error
+{
+	if (!error)
+		return;
+
+	if (window.attachedSheet) {
+		[displayErrorQueue addObject:error];
+		return;
+	}
+
+	[window makeKeyAndOrderFront:self];
+	[NSApp presentError:error
+		 modalForWindow:window
+			   delegate:self
+	 didPresentSelector:@selector(didPresentErrorWithRecovery:contextInfo:)
+			contextInfo:NULL];
+}
+
 - (void)diskDidChange:(NSNotification *)notif
 {
 	NSUInteger row = [disksArrayController.arrangedObjects indexOfObject:notif.object];
@@ -603,7 +708,18 @@
 	Disk *disk = notif.object;
 	NSMutableDictionary *info;
 	
-	if (disk.isMounted) {
+	if (disk.isMounted && [disk.mountArgs containsObject:@"rdonly"] && disk.isFileSystemWritable) {
+		Log(LOG_ERR, @"Volume %@ was requested read-only but mounted writable; unmounting.", disk.BSDName);
+		NSDictionary *info = @{
+			NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@: %@", NSLocalizedString(@"Read-only mount failed", nil), disk.BSDName],
+			NSLocalizedFailureReasonErrorKey: NSLocalizedString(@"The volume mounted writable after a read-only request. It has been unmounted.", nil),
+			NSLocalizedRecoverySuggestionErrorKey: NSLocalizedString(@"Confirm the volume is unmounted before imaging, and use a hardware write-blocker for evidence.", nil)
+		};
+		NSError *error = [NSError errorWithDomain:AppErrorDomain code:EPERM userInfo:info];
+		[disk unmountWithOptions:kDiskUnmountOptionDefault];
+		[self presentDiskError:error];
+	}
+	else if (disk.isMounted) {
 		Log(LOG_DEBUG, @"%s: Mounted: %@", __func__, disk.BSDName);
 	}
 	else {

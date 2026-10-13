@@ -162,13 +162,17 @@
 		else if (mediaName) 
 			[desc appendString:mediaName];
 
-		self.textCell = [[[NSCell alloc] initTextCell:desc] autorelease];
-		self.textCell.lineBreakMode = NSLineBreakByTruncatingTail;
+		NSTextFieldCell *labelCell = [[NSTextFieldCell alloc] init];
+		labelCell.stringValue = desc;
+		labelCell.lineBreakMode = NSLineBreakByTruncatingTail;
+		self.textCell = [labelCell autorelease];
 		[desc release];
 		
 		// Create Icon cell
 		
-		self.iconCell = [[[NSImageCell alloc] initImageCell:disk.icon] autorelease];
+		NSImageCell *imageCell = [[NSImageCell alloc] init];
+		imageCell.image = disk.icon;
+		self.iconCell = [imageCell autorelease];
 		iconCell.imageScaling = NSImageScaleProportionallyDown;
 		iconCell.alignment = NSTextAlignmentLeft;
 	}

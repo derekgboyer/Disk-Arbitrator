@@ -46,18 +46,19 @@ void InitializeDiskArbitration(void)
 BOOL DADiskValidate(DADiskRef diskRef)
 {
 	//
-	// Reject certain disk media
+	// Reject certain disk media. Do not raise: an exception inside a Disk Arbitration
+	// callback kills the process and drops mount protection.
 	//
 	
 	BOOL isOK = YES;
 	
-	// Reject if no BSDName
-	if (DADiskGetBSDName(diskRef) == NULL) 
-		[NSException raise:NSInternalInconsistencyException format:@"Disk without BSDName"];
-//		return NO;
+	// APFS synthesized disks, snapshots, and some disk-image pieces have no BSD name.
+	if (DADiskGetBSDName(diskRef) == NULL)
+		return NO;
 	
 	CFDictionaryRef desc = DADiskCopyDescription(diskRef);
-	//	CFShow(desc);
+	if (!desc)
+		return NO;
 	
 	// Reject if no key-value for Whole Media
 	CFBooleanRef wholeMediaValue = CFDictionaryGetValue(desc, kDADiskDescriptionMediaWholeKey);
@@ -123,8 +124,22 @@ void DiskDescriptionChangedCallback(DADiskRef diskRef, CFArrayRef keys, void *co
 
 void DiskMountCallback(DADiskRef diskRef, DADissenterRef dissenter, void *context)
 {
-//	Disk *disk = (Disk *)context;
 	NSMutableDictionary *info = nil;
+
+	if ([((id)context) isKindOfClass:[Disk class]]) {
+		Disk *disk = (Disk *)context;
+		CFDictionaryRef desc = diskRef ? DADiskCopyDescription(diskRef) : NULL;
+		if (desc) {
+			disk.diskDescription = (NSDictionary *)desc;
+			CFRelease(desc);
+		}
+		disk.isMounting = NO;
+		disk.allowNextMount = NO;
+		// Keep rejectedMount set when our read-only remount fails so a system retry
+		// cannot schedule another attempt and loop the failure dialog.
+		if (!dissenter)
+			disk.rejectedMount = NO;
+	}
 
 	Log(LOG_DEBUG, @"%s %@ dissenter: %p", __func__, context, dissenter);
 

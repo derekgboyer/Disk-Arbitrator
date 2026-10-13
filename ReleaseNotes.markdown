@@ -1,5 +1,19 @@
 ## Release Notes
 
+#### 0.9 2026/10/13
+
+* Universal `arm64` + `x86_64` build for macOS 13 Ventura and later, including current Xcode. The app is ad-hoc signed with the hardened runtime and is not sandboxed.
+* Deployment target is 13.0. The old per-architecture minimum of 10.6 was removed.
+* Mount approval only allows a mount that Disk Arbitrator itself just submitted. A system retry can no longer slip through as read-write while a read-only remount is still pending. If a requested read-only mount comes up writable, it is unmounted.
+* Read-only remounts of APFS and other non-HFS volumes use `rdonly` only. The HFS ignore-journal flag is unchanged.
+* Disks with no BSD name are ignored instead of raising out of the Disk Arbitration callback.
+* Disk icons no longer depend on `KextManagerCreateURLForBundleIdentifier`, which cannot see kexts that exist only in the kernel collection.
+* The login item uses `SMAppService` and a Launch Agent inside the app bundle. The obsolete `EnableTransactions` plist and the hard-coded executable path are no longer written to `~/Library/LaunchAgents`.
+* Encrypted disk images ask for a password in the app. Authorization Services no longer returns that password.
+* Sudden termination is disabled and App Nap is suspended so the approval callback stays scheduled.
+* Deprecated AppKit, NSTask, and open-panel calls used on the mount, attach, and settings paths were updated. Cell-based `DiskCell` drawing remains; `NSCell` is still what the main table uses.
+* Full Disk Access is documented in the README and available from the status menu. It is not required for the approval callback. Login Items approval is required before the Launch Agent will run.
+
 #### 0.8 2017/9/16
 
 * Added "Show main window at activation" preference (thanks melomac)
