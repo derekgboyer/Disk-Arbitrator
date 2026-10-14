@@ -11,6 +11,7 @@
 #import "Disk.h"
 #import "DiskArbitrationPrivateFunctions.h"
 #import "AuditLog.h"
+#import "TrustedDiskStore.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -177,6 +178,14 @@
 	if (disk.allowNextMount) {
 		disk.allowNextMount = NO;
 		disk.rejectedMount = NO;
+		return NULL;
+	}
+
+	// A trusted disk mounts the way the system asked. Block and read-only still apply to every other disk.
+	TrustedDiskRule *trusted = [[TrustedDiskStore sharedStore] ruleMatchingDisk:disk];
+	if (trusted) {
+		NSString *message = [NSString stringWithFormat:@"%@ %@", trusted.kind, trusted.identifier];
+		[[AuditLog sharedLog] recordEvent:DAAuditEventRuleMatched disk:disk action:@"allowed_normal_mount" message:message];
 		return NULL;
 	}
 

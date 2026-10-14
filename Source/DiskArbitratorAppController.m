@@ -15,6 +15,7 @@
 #import "DiskInfoController.h"
 #import "AttachDiskImageController.h"
 #import "AuditLog.h"
+#import "TrustedDiskStore.h"
 #import <ServiceManagement/ServiceManagement.h>
 #include <unistd.h>
 #include <errno.h>
@@ -106,9 +107,12 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 
 	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Full Disk Access…", nil) action:@selector(showFullDiskAccessHelp:)];
 	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Audit Log…", nil) action:@selector(showAuditLog:)];
+	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Trusted Disks…", nil) action:@selector(showTrustedDisks:)];
+	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Trust Selected Disk", nil) action:@selector(trustSelectedDisk:)];
 	
 	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 	[center addObserver:self selector:@selector(diskDidChange:) name:DADiskDidChangeNotification object:nil];
+	[center addObserver:self selector:@selector(trustedDisksChanged:) name:TrustedDiskStoreDidChangeNotification object:nil];
 	[center addObserver:self selector:@selector(didAttemptEject:) name:DADiskDidAttemptEjectNotification object:nil];
 	[center addObserver:self selector:@selector(didAttemptMount:) name:DADiskDidAttemptMountNotification object:nil];
 	[center addObserver:self selector:@selector(didAttemptUnmount:) name:DADiskDidAttemptUnmountNotification object:nil];
@@ -182,6 +186,45 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 {
 	[[AuditLogWindowController sharedController] showWindow:sender];
 	ActivateDiskArbitratorApp();
+}
+
+- (IBAction)showTrustedDisks:(id)sender
+{
+	[[TrustedDisksWindowController sharedController] showWindow:sender];
+	ActivateDiskArbitratorApp();
+}
+
+- (IBAction)trustSelectedDisk:(id)sender
+{
+	NSError *error = nil;
+	TrustedDiskRule *rule = [[TrustedDiskStore sharedStore] trustDisk:self.selectedDisk error:&error];
+	if (!rule) {
+		[[NSAlert alertWithError:error] runModal];
+		return;
+	}
+	[self.tableView reloadData];
+}
+
+- (void)trustedDisksChanged:(NSNotification *)notification
+{
+	[self.tableView reloadData];
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem
+{
+	if (menuItem.action == @selector(trustSelectedDisk:)) {
+		Disk *disk = self.selectedDisk;
+		BOOL identifiable = DAVolumeUUIDForDisk(disk).length > 0 || DAMediaUUIDForDisk(disk).length > 0;
+		BOOL alreadyTrusted = identifiable && [[TrustedDiskStore sharedStore] ruleMatchingDisk:disk] != nil;
+		menuItem.title = alreadyTrusted ? NSLocalizedString(@"Selected Disk Is Trusted", nil)
+										: NSLocalizedString(@"Trust Selected Disk", nil);
+		return identifiable && !alreadyTrusted;
+	}
+	if (menuItem.action == @selector(performActivation:))
+		return !self.arbitrator.isActivated;
+	if (menuItem.action == @selector(performDeactivation:))
+		return self.arbitrator.isActivated;
+	return YES;
 }
 
 - (IBAction)showPreferences:(id)sender
