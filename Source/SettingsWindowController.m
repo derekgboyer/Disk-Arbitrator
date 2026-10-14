@@ -93,7 +93,7 @@
 		diskButtons,
 		[self sectionLabel:NSLocalizedString(@"Updates", nil)],
 		self.updatesCheckbox,
-		[self bodyLabel:NSLocalizedString(@"Automatic checks use Sparkle and the GitHub appcast. They start after the EdDSA public key is set in SU_PUBLIC_ED_KEY. The private key stays out of the app.", nil)],
+		[self bodyLabel:NSLocalizedString(@"Automatic checks use Sparkle and the GitHub appcast. The EdDSA public key is included in the app. The private key stays out of the app.", nil)],
 		updatesButton
 	]];
 	stack.orientation = NSUserInterfaceLayoutOrientationVertical;

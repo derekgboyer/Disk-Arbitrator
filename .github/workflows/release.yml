@@ -50,8 +50,6 @@ jobs:
           echo "mode=developer-id" >> "$GITHUB_OUTPUT"
 
       - name: Build universal Release
-        env:
-          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         run: |
           set -euo pipefail
           SIGN_ID="${{ steps.sign.outputs.identity }}"
@@ -68,7 +66,7 @@ jobs:
             CODE_SIGN_IDENTITY="$SIGN_ID" \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="" \
-            SU_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY}" \
+            SU_PUBLIC_ED_KEY="kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=" \
             build
           APP="${RUNNER_TEMP}/disk-arbitrator/Build/Products/Release/Disk Arbitrator.app"
           BINARY="${APP}/Contents/MacOS/Disk Arbitrator"
@@ -157,7 +155,7 @@ jobs:
 
       - name: Build Sparkle appcast
         env:
-          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -182,7 +180,7 @@ jobs:
           PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/"
           APPCAST="${RUNNER_TEMP}/dist/appcast.xml"
           SIGNATURE=""
-          if [ -n "${SPARKLE_ED_PRIVATE_KEY}" ]; then
+          if [ -n "${SPARKLE_PRIVATE_KEY}" ]; then
             curl -fsSL -o "${RUNNER_TEMP}/Sparkle.tar.xz" "https://github.com/sparkle-project/Sparkle/releases/download/2.7.1/Sparkle-2.7.1.tar.xz"
             mkdir -p "${RUNNER_TEMP}/Sparkle"
             tar -xf "${RUNNER_TEMP}/Sparkle.tar.xz" -C "${RUNNER_TEMP}/Sparkle"
@@ -193,7 +191,7 @@ jobs:
               exit 1
             fi
             chmod +x "$GENERATE" "$SIGN_UPDATE"
-            if ! printf '%s\n' "$SPARKLE_ED_PRIVATE_KEY" | "$GENERATE" \
+            if ! printf '%s\n' "$SPARKLE_PRIVATE_KEY" | "$GENERATE" \
               --ed-key-file - \
               --download-url-prefix "$PREFIX" \
               --maximum-versions 0 \
@@ -201,7 +199,7 @@ jobs:
               -o "$APPCAST" \
               "$ARCHIVES"; then
               echo "generate_appcast failed. Signing the archive and writing the feed directly."
-              SIG_LINE=$(printf '%s\n' "$SPARKLE_ED_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - "$ZIP")
+              SIG_LINE=$(printf '%s\n' "$SPARKLE_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - "$ZIP")
               echo "$SIG_LINE"
               SIGNATURE=$(printf '%s\n' "$SIG_LINE" | sed -n 's/.*edSignature="\([^"]*\)".*/\1/p')
               python3 scripts/update_appcast.py \
@@ -215,7 +213,7 @@ jobs:
                 --title "Version ${VERSION}"
             fi
           else
-            echo "SPARKLE_ED_PRIVATE_KEY is not set. The appcast has no EdDSA signature, so Sparkle will reject it until a signed release is published."
+            echo "SPARKLE_PRIVATE_KEY is not set. The appcast has no EdDSA signature, so Sparkle will reject it until a signed release is published."
             python3 scripts/update_appcast.py \
               --appcast "$APPCAST" \
               --preserve-from "$PREVIOUS" \

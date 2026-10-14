@@ -326,7 +326,7 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	if (!self.updaterController) {
 		NSAlert *alert = [[NSAlert alloc] init];
 		alert.messageText = NSLocalizedString(@"Updates are not configured", nil);
-		alert.informativeText = NSLocalizedString(@"Check for Updates needs Sparkle’s public key. On a Mac, run Sparkle’s generate_keys tool and put the printed public key in the SU_PUBLIC_ED_KEY build setting. Keep the private key out of the repository. A release build can receive the same public key from the SPARKLE_PUBLIC_ED_KEY secret.", nil);
+		alert.informativeText = NSLocalizedString(@"Check for Updates needs Sparkle’s public key in SUPublicEDKey. The committed key is the SU_PUBLIC_ED_KEY build setting. Keep the private key out of the repository. The release workflow signs the appcast with the SPARKLE_PRIVATE_KEY secret.", nil);
 		[alert addButtonWithTitle:NSLocalizedString(@"OK", nil)];
 		[alert runModal];
 		return;

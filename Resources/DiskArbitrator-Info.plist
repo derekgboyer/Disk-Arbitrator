@@ -25,7 +25,7 @@
 	<key>SUFeedURL</key>
 	<string>https://github.com/derekgboyer/Disk-Arbitrator/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>$(SU_PUBLIC_ED_KEY)</string>
+	<string>kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>LSMinimumSystemVersion</key>

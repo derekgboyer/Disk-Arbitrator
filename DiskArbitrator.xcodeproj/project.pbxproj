@@ -543,7 +543,7 @@
 				PRODUCT_NAME = "Disk Arbitrator";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				SU_PUBLIC_ED_KEY = "";
+				SU_PUBLIC_ED_KEY = "kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=";
 			};
 			name = Debug;
 		};
@@ -575,7 +575,7 @@
 				PRODUCT_NAME = "Disk Arbitrator";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				SU_PUBLIC_ED_KEY = "";
+				SU_PUBLIC_ED_KEY = "kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=";
 			};
 			name = Release;
 		};
