@@ -148,8 +148,14 @@ jobs:
           if [ -f "$APP/Contents/Resources/ReleaseNotes.html" ]; then
             cp "$APP/Contents/Resources/ReleaseNotes.html" "$STAGE/"
           fi
-          if [ -f LICENSE ]; then
-            cp LICENSE "$STAGE/"
+          if [ ! -f LICENSE ]; then
+            echo "Repo root LICENSE is required on the DMG and was not found." >&2
+            exit 1
+          fi
+          cp LICENSE "$STAGE/LICENSE"
+          if [ ! -f "$STAGE/LICENSE" ] || [ ! -d "$STAGE/Disk Arbitrator.app" ]; then
+            echo "LICENSE was not staged beside Disk Arbitrator.app." >&2
+            exit 1
           fi
           cp README.markdown "$STAGE/README.md"
           cp ReleaseNotes.markdown "$STAGE/ReleaseNotes.md"
