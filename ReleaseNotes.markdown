@@ -1,5 +1,28 @@
 ## Release Notes
 
+#### 0.10 2026/10/14
+
+* Audit log. Disk appear, disappear, block, read-only mount, read-write mount, unmount, eject, error, and trusted-rule events are appended as JSON Lines to `~/Library/Logs/Disk Arbitrator/audit.jsonl`. Timestamps are UTC. Mount and unmount lines follow the volume path, including mounts macOS performs for a trusted disk and unmounts started outside the app. A disk that is already mounted at launch is `appeared` only. Audit Log… shows the recent entries and can export the whole file as CSV or JSON.
+* Trusted disks. Trust Selected Disk remembers a volume UUID (or the media UUID when there is no volume UUID). That disk mounts normally. Block Mounts and Read-only still apply to every other disk. Matches are written to the audit log. Rules are stored in `~/Library/Application Support/Disk Arbitrator/trusted-disks.json`.
+* Sparkle 2 checks `https://github.com/derekgboyer/Disk-Arbitrator/releases/latest/download/appcast.xml`. Check for Updates… is in the status menu. Settings has “Check for updates automatically.” `SUPublicEDKey` is `kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=`. The private key is the `SPARKLE_PRIVATE_KEY` GitHub Actions secret and is not in this repository.
+* A push of a `v*` tag builds a universal Release app, uploads a DMG and a zip, and updates `appcast.xml` on the GitHub release. Developer ID signing and notarization run when the repository secrets below are set. Without them the artifact is ad-hoc signed with the hardened runtime.
+* Build number is 10. Sparkle compares `CFBundleVersion`, so the next release has to use a higher build number.
+* The disk window, toolbar, status icon, and Settings window use SF Symbols and system colors for light mode, dark mode, and the accent color. Each disk row shows whether it is blocked, read-only, read-write, or trusted. The app icon is the original aluminum disk and colored square, redrawn for the current macOS icon shape.
+
+#### 0.9 2026/10/13
+
+* Universal `arm64` + `x86_64` build for macOS 13 Ventura and later, including current Xcode. The app is ad-hoc signed with the hardened runtime and is not sandboxed.
+* Deployment target is 13.0. The old per-architecture minimum of 10.6 was removed.
+* Mount approval only allows a mount that Disk Arbitrator itself just submitted. A system retry can no longer slip through as read-write while a read-only remount is still pending. If a requested read-only mount comes up writable, it is unmounted.
+* Read-only remounts of APFS and other non-HFS volumes use `rdonly` only. The HFS ignore-journal flag is unchanged.
+* Disks with no BSD name are ignored instead of raising out of the Disk Arbitration callback.
+* Disk icons no longer depend on `KextManagerCreateURLForBundleIdentifier`, which cannot see kexts that exist only in the kernel collection.
+* The login item uses `SMAppService` and a Launch Agent inside the app bundle. The obsolete `EnableTransactions` plist and the hard-coded executable path are no longer written to `~/Library/LaunchAgents`.
+* Encrypted disk images ask for a password in the app. Authorization Services no longer returns that password.
+* Sudden termination is disabled and App Nap is suspended so the approval callback stays scheduled.
+* Deprecated AppKit, NSTask, and open-panel calls used on the mount, attach, and settings paths were updated. Cell-based `DiskCell` drawing remains; `NSCell` is still what the main table uses.
+* Full Disk Access is documented in the README and available from the status menu. It is not required for the approval callback. Login Items approval is required before the Launch Agent will run.
+
 #### 0.8 2017/9/16
 
 * Added "Show main window at activation" preference (thanks melomac)

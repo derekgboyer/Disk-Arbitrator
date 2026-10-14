@@ -11,7 +11,7 @@
 @class Arbitrator;
 @class Disk;
 
-@interface AppController : NSObject <NSToolbarItemValidation> // <NSApplicationDelegate>
+@interface AppController : NSObject <NSToolbarItemValidation, NSMenuItemValidation> // <NSApplicationDelegate>
 
 @property (assign) IBOutlet NSPanel *window;
 @property (assign) IBOutlet NSMenu *statusMenu;
@@ -27,6 +27,10 @@
 - (IBAction)showAboutPanel:(id)sender;
 - (IBAction)showMainWindow:(id)sender;
 - (IBAction)showPreferences:(id)sender;
+- (IBAction)showAuditLog:(id)sender;
+- (IBAction)showTrustedDisks:(id)sender;
+- (IBAction)checkForUpdates:(id)sender;
+- (IBAction)trustSelectedDisk:(id)sender;
 - (IBAction)performActivation:(id)sender;
 - (IBAction)performDeactivation:(id)sender;
 - (IBAction)toggleActivation:(id)sender;

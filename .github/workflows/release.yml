@@ -1,0 +1,258 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import Developer ID certificate
+        id: sign
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BUILD_CERTIFICATE_BASE64}" ] || [ -z "${P12_PASSWORD}" ]; then
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+            echo "mode=adhoc" >> "$GITHUB_OUTPUT"
+            echo "No Developer ID certificate secrets. The app will be ad-hoc signed."
+            exit 0
+          fi
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          if [ -z "${KEYCHAIN_PASSWORD}" ]; then
+            KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          fi
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -n 's/.*"\(Developer ID Application:[^"]*\)"/\1/p' | head -1)
+          if [ -z "$IDENTITY" ]; then
+            echo "The imported certificate has no Developer ID Application identity."
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+            exit 1
+          fi
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+          echo "mode=developer-id" >> "$GITHUB_OUTPUT"
+
+      - name: Build universal Release
+        run: |
+          set -euo pipefail
+          SIGN_ID="${{ steps.sign.outputs.identity }}"
+          if [ -z "$SIGN_ID" ]; then
+            SIGN_ID="-"
+          fi
+          xcodebuild \
+            -project DiskArbitrator.xcodeproj \
+            -scheme DiskArbitrator \
+            -configuration Release \
+            -derivedDataPath "${RUNNER_TEMP}/disk-arbitrator" \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64 x86_64" \
+            CODE_SIGN_IDENTITY="$SIGN_ID" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            SU_PUBLIC_ED_KEY="kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=" \
+            build
+          APP="${RUNNER_TEMP}/disk-arbitrator/Build/Products/Release/Disk Arbitrator.app"
+          BINARY="${APP}/Contents/MacOS/Disk Arbitrator"
+          test -d "$APP"
+          lipo -info "$BINARY" | grep -q arm64
+          lipo -info "$BINARY" | grep -q x86_64
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -d --verbose=2 "$APP" 2>&1 | grep -q runtime
+
+      - name: Notarize the app
+        id: notarize
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          set -euo pipefail
+          echo "stapled=false" >> "$GITHUB_OUTPUT"
+          if [ "${{ steps.sign.outputs.mode }}" != "developer-id" ]; then
+            echo "Ad-hoc signed build. Skipping notarization."
+            exit 0
+          fi
+          if [ -z "${APPLE_API_KEY_ID}" ] || [ -z "${APPLE_API_ISSUER_ID}" ] || [ -z "${APPLE_API_KEY}" ]; then
+            echo "Developer ID signed, without notarization secrets. The upload will not be stapled."
+            exit 0
+          fi
+          APP="${RUNNER_TEMP}/disk-arbitrator/Build/Products/Release/Disk Arbitrator.app"
+          ZIP="${RUNNER_TEMP}/notarize.zip"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+          KEY_DIR="$RUNNER_TEMP/private_keys"
+          mkdir -p "$KEY_DIR"
+          printf '%s\n' "$APPLE_API_KEY" > "$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8"
+          chmod 600 "$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8"
+          xcrun notarytool submit "$ZIP" \
+            --key "$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$APP"
+          echo "stapled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Package zip and DMG
+        id: package
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          set -euo pipefail
+          APP="${RUNNER_TEMP}/disk-arbitrator/Build/Products/Release/Disk Arbitrator.app"
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")
+          BUILD=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Contents/Info.plist")
+          DIST="${RUNNER_TEMP}/dist"
+          mkdir -p "$DIST"
+          ZIP="$DIST/Disk.Arbitrator-${VERSION}.zip"
+          DMG="$DIST/Disk.Arbitrator-${VERSION}.dmg"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+          STAGE="${RUNNER_TEMP}/dmg-root"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          cp -R "$APP" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          if [ -f "$APP/Contents/Resources/README.html" ]; then
+            cp "$APP/Contents/Resources/README.html" "$STAGE/"
+          fi
+          if [ -f "$APP/Contents/Resources/ReleaseNotes.html" ]; then
+            cp "$APP/Contents/Resources/ReleaseNotes.html" "$STAGE/"
+          fi
+          hdiutil create -volname "Disk Arbitrator" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+          if [ "${{ steps.sign.outputs.mode }}" = "developer-id" ]; then
+            codesign --force --sign "${{ steps.sign.outputs.identity }}" --timestamp "$DMG"
+            if [ "${{ steps.notarize.outputs.stapled }}" = "true" ]; then
+              KEY_DIR="$RUNNER_TEMP/private_keys"
+              xcrun notarytool submit "$DMG" \
+                --key "$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8" \
+                --key-id "$APPLE_API_KEY_ID" \
+                --issuer "$APPLE_API_ISSUER_ID" \
+                --wait
+              xcrun stapler staple "$DMG"
+            fi
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+
+      - name: Build Sparkle appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          ZIP="${{ steps.package.outputs.zip }}"
+          VERSION="${{ steps.package.outputs.version }}"
+          BUILD="${{ steps.package.outputs.build }}"
+          ARCHIVES="${RUNNER_TEMP}/sparkle-archives"
+          mkdir -p "$ARCHIVES"
+          cp "$ZIP" "$ARCHIVES/"
+          PREVIOUS="${RUNNER_TEMP}/previous-appcast.xml"
+          if gh release view --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release download --repo "$GITHUB_REPOSITORY" --pattern "appcast.xml" --dir "${RUNNER_TEMP}/previous-release" || true
+            if [ -f "${RUNNER_TEMP}/previous-release/appcast.xml" ]; then
+              cp "${RUNNER_TEMP}/previous-release/appcast.xml" "$PREVIOUS"
+              cp "$PREVIOUS" "$ARCHIVES/appcast.xml"
+            fi
+            mkdir -p "${RUNNER_TEMP}/previous-zips"
+            gh release download --repo "$GITHUB_REPOSITORY" --pattern "*.zip" --dir "${RUNNER_TEMP}/previous-zips" || true
+            find "${RUNNER_TEMP}/previous-zips" -name '*.zip' -exec cp {} "$ARCHIVES/" \;
+          fi
+          PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/"
+          APPCAST="${RUNNER_TEMP}/dist/appcast.xml"
+          SIGNATURE=""
+          if [ -n "${SPARKLE_PRIVATE_KEY}" ]; then
+            curl -fsSL -o "${RUNNER_TEMP}/Sparkle.tar.xz" "https://github.com/sparkle-project/Sparkle/releases/download/2.7.1/Sparkle-2.7.1.tar.xz"
+            mkdir -p "${RUNNER_TEMP}/Sparkle"
+            tar -xf "${RUNNER_TEMP}/Sparkle.tar.xz" -C "${RUNNER_TEMP}/Sparkle"
+            GENERATE=$(find "${RUNNER_TEMP}/Sparkle" -name generate_appcast -type f | head -1)
+            SIGN_UPDATE=$(find "${RUNNER_TEMP}/Sparkle" -name sign_update -type f | head -1)
+            if [ -z "$GENERATE" ] || [ -z "$SIGN_UPDATE" ]; then
+              echo "Sparkle tools archive did not contain generate_appcast and sign_update."
+              exit 1
+            fi
+            chmod +x "$GENERATE" "$SIGN_UPDATE"
+            if ! printf '%s\n' "$SPARKLE_PRIVATE_KEY" | "$GENERATE" \
+              --ed-key-file - \
+              --download-url-prefix "$PREFIX" \
+              --maximum-versions 0 \
+              --maximum-deltas 0 \
+              -o "$APPCAST" \
+              "$ARCHIVES"; then
+              echo "generate_appcast failed. Signing the archive and writing the feed directly."
+              SIG_LINE=$(printf '%s\n' "$SPARKLE_PRIVATE_KEY" | "$SIGN_UPDATE" --ed-key-file - "$ZIP")
+              echo "$SIG_LINE"
+              SIGNATURE=$(printf '%s\n' "$SIG_LINE" | sed -n 's/.*edSignature="\([^"]*\)".*/\1/p')
+              python3 scripts/update_appcast.py \
+                --appcast "$APPCAST" \
+                --preserve-from "$PREVIOUS" \
+                --version "$BUILD" \
+                --short-version "$VERSION" \
+                --url "${PREFIX}$(basename "$ZIP")" \
+                --length "$(stat -f %z "$ZIP")" \
+                --ed-signature "$SIGNATURE" \
+                --title "Version ${VERSION}"
+            fi
+          else
+            echo "SPARKLE_PRIVATE_KEY is not set. The appcast has no EdDSA signature, so Sparkle will reject it until a signed release is published."
+            python3 scripts/update_appcast.py \
+              --appcast "$APPCAST" \
+              --preserve-from "$PREVIOUS" \
+              --version "$BUILD" \
+              --short-version "$VERSION" \
+              --url "${PREFIX}$(basename "$ZIP")" \
+              --length "$(stat -f %z "$ZIP")" \
+              --title "Version ${VERSION}"
+          fi
+          if [ -f "$PREVIOUS" ]; then
+            python3 scripts/update_appcast.py --appcast "$APPCAST" --preserve-from "$PREVIOUS"
+          fi
+          test -f "$APPCAST"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          NOTES="${RUNNER_TEMP}/release-notes.md"
+          {
+            echo "Disk Arbitrator ${{ steps.package.outputs.version }} (build ${{ steps.package.outputs.build }})"
+            echo
+            echo "Signing: ${{ steps.sign.outputs.mode }}"
+            echo "Notarized: ${{ steps.notarize.outputs.stapled }}"
+            echo
+            echo "Sparkle reads appcast.xml from this release:"
+            echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/appcast.xml"
+            echo
+            echo "Copy the app to /Applications before installing the Launch Agent."
+          } > "$NOTES"
+          ASSETS=(
+            "${{ steps.package.outputs.zip }}"
+            "${{ steps.package.outputs.dmg }}"
+            "${RUNNER_TEMP}/dist/appcast.xml"
+          )
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "${ASSETS[@]}"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "Disk Arbitrator ${TAG}" --notes-file "$NOTES" "${ASSETS[@]}"
+          fi
