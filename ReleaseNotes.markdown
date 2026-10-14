@@ -6,8 +6,8 @@
 * Trusted disks. Trust Selected Disk remembers a volume UUID (or the media UUID when there is no volume UUID). That disk mounts normally. Block Mounts and Read-only still apply to every other disk. Matches are written to the audit log. Rules are stored in `~/Library/Application Support/Disk Arbitrator/trusted-disks.json`.
 * Sparkle 2 checks `https://github.com/derekgboyer/Disk-Arbitrator/releases/latest/download/appcast.xml`. Check for Updates… is in the status menu. Settings has “Check for updates automatically.” `SUPublicEDKey` is `kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=`. The private key is the `SPARKLE_PRIVATE_KEY` GitHub Actions secret and is not in this repository.
 * A push of a `v*` tag builds a universal Release app, uploads a DMG and a zip, and updates `appcast.xml` on the GitHub release. Developer ID signing and notarization run when the repository secrets below are set. Without them the artifact is ad-hoc signed with the hardened runtime.
-* Build number is 10. Sparkle compares `CFBundleVersion`, so the next release has to use a higher build number.
-* The disk window, toolbar, status icon, and Settings window use SF Symbols and system colors for light mode, dark mode, and the accent color. Each disk row shows whether it is blocked, read-only, read-write, or trusted. The app icon is the original aluminum disk and colored square, redrawn for the current macOS icon shape.
+* Build number is 11. Sparkle compares `CFBundleVersion`, so the next release has to use a higher build number.
+* The disk window, toolbar, and Settings window use SF Symbols and system colors for light mode, dark mode, and the accent color. Each disk row shows whether it is blocked, read-only, read-write, or trusted. The menu bar icon is the original platter, spindle, and actuator arm, redrawn as a crisp template: gray when off, green when blocking mounts, and orange in read-only mode. The app icon is the original aluminum disk and colored square, redrawn for the current macOS icon shape.
 
 #### 0.9 2026/10/13
 
