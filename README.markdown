@@ -38,9 +38,78 @@ These are limits of Disk Arbitration and SIP, not optional features that were re
 * Encrypted disk images ask for a password in the app. The old Authorization Services prompt stopped returning the password the user typed. Software license agreements are still answered "Yes" automatically.
 * Time Machine and other automatic mounts are blocked while Disk Arbitrator is activated. That is the same behavior as before.
 
+## Audit log
+
+Every disk event is appended to `~/Library/Logs/Disk Arbitrator/audit.jsonl`. The file is JSON Lines: one JSON object per line. The fields are `timestamp`, `event`, `action`, `message`, `bsdName`, `volumeName`, `volumeUUID`, `mediaUUID`, `fileSystem`, `mediaName`, `deviceModel`, `deviceProtocol`, and `mediaSize`.
+
+Events are `appeared`, `disappeared`, `blocked`, `mounted_read_only`, `mounted_read_write`, `unmounted`, `ejected`, `error`, and `rule_matched`. Launch records disks that are already attached as `appeared`. The log is append-only from the app’s point of view. It is an ordinary file in your home directory, so it is an operational record, not a sealed evidence store.
+
+**Audit Log…** in the status menu shows the newest entries (up to 5,000 on screen). Export JSON writes the whole file as a JSON array. Export CSV writes the same rows. Reveal in Finder opens the log.
+
+## Trusted disks
+
+**Trust Selected Disk** stores a rule for the selected disk’s volume UUID. If Disk Arbitration did not report a volume UUID, the rule uses the media UUID. **Trusted Disks…** lists the rules and can remove them. The file is `~/Library/Application Support/Disk Arbitrator/trusted-disks.json`.
+
+While Disk Arbitrator is activated, a matching disk is allowed to mount the way macOS requested. Every other disk is still blocked or remounted read-only. A match is an audit event named `rule_matched` with action `allowed_normal_mount`. Trust is a convenience for a disk you already know. It is not a write blocker, and it does not change a volume that is already mounted.
+
+## Updates
+
+The app links Sparkle 2 with Swift Package Manager. **Check for Updates…** reads:
+
+`https://github.com/derekgboyer/Disk-Arbitrator/releases/latest/download/appcast.xml`
+
+**Settings…** includes “Check for updates automatically” (`SUEnableAutomaticChecks`). That schedules a check. It does not install an update by itself.
+
+Sparkle stays idle until the app contains an EdDSA public key. A local build gets that key from the Xcode build setting `SU_PUBLIC_ED_KEY`. A GitHub release build gets it from the `SPARKLE_PUBLIC_ED_KEY` secret. Without the key, Check for Updates explains how to create one instead of showing Sparkle’s missing-key alert.
+
+Generate the key pair once, on a Mac, from the Sparkle 2 tools archive (`generate_keys` is inside the `.tar.xz` on the [Sparkle releases](https://github.com/sparkle-project/Sparkle/releases)):
+
+```
+./bin/generate_keys
+```
+
+The tool prints the public key and stores the private key in your login keychain (account `ed25519`, service `https://sparkle-project.org`). Put the public key in `SU_PUBLIC_ED_KEY` and in the `SPARKLE_PUBLIC_ED_KEY` repository secret.
+
+Export the private key for GitHub Actions. Do not commit the key, do not put it in the repository, and do not paste it into a pull request:
+
+```
+security find-generic-password -a ed25519 -s "https://sparkle-project.org" -w
+```
+
+Store that output as the `SPARKLE_ED_PRIVATE_KEY` secret. `./bin/generate_keys -h` lists the current export flags if you prefer the tool’s own export over the keychain command. The public key inside the app and the private key that signs `appcast.xml` have to be the pair from the same `generate_keys` run. Sparkle compares `CFBundleVersion` (the Xcode build number), which is 10 for version 0.10 and must increase for the next release.
+
+## Releasing
+
+Pull requests and branch pushes run `.github/workflows/build.yml`, which builds the universal Release app.
+
+Pushing a tag named `v*` (for example `v0.10`) runs `.github/workflows/release.yml` on a macOS runner. It builds the universal Release app, uploads a zip and a DMG to the GitHub release, and writes `appcast.xml` onto that same release so the feed URL above keeps working. The feed item points at the zip. Older appcast items are kept when a previous release already has `appcast.xml`.
+
+Signing and notarization are optional. With none of the secrets below, the workflow ad-hoc signs the app (`codesign` identity `-`, hardened runtime) and still uploads the zip, DMG, and appcast. An appcast built without `SPARKLE_ED_PRIVATE_KEY` has no EdDSA signature. Sparkle will reject that feed until you add the key and publish again.
+
+Set these under the repository’s Actions secrets:
+
+| Secret | Required | Purpose |
+| --- | --- | --- |
+| `SPARKLE_PUBLIC_ED_KEY` | For working updates | EdDSA public key embedded as `SUPublicEDKey` |
+| `SPARKLE_ED_PRIVATE_KEY` | For a signed appcast | EdDSA private key passed to `generate_appcast` / `sign_update`. Never commit this |
+| `BUILD_CERTIFICATE_BASE64` | No | Base64 of a Developer ID Application `.p12` |
+| `P12_PASSWORD` | With the certificate | Password for that `.p12` |
+| `KEYCHAIN_PASSWORD` | No | Temporary keychain password on the runner. The workflow creates one if this is empty |
+| `APPLE_API_KEY_ID` | No | App Store Connect API key id, for `notarytool` |
+| `APPLE_API_ISSUER_ID` | No | App Store Connect issuer id |
+| `APPLE_API_KEY` | No | Contents of the `AuthKey_XXXX.p8` file |
+
+Create the certificate secret from the `.p12` exported from Keychain Access:
+
+```
+base64 -i DeveloperID.p12 | pbcopy
+```
+
+Notarization runs only when the Developer ID certificate and the three App Store Connect secrets are all present. The workflow then staples the app and the DMG.
+
 ## Downloads
 
-You can find links to compiled executables on the [releases](https://github.com/aburgh/Disk-Arbitrator/releases) page.
+Builds from this fork are attached to [its releases](https://github.com/derekgboyer/Disk-Arbitrator/releases). Upstream history remains at [aburgh/Disk-Arbitrator](https://github.com/aburgh/Disk-Arbitrator/releases).
 
 ## Quick Start
 
