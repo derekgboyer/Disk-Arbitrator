@@ -1,5 +1,12 @@
 ## Release Notes
 
+#### 0.10.2 2026/10/14
+
+* Developer ID signed and notarized build, so it opens normally on macOS 27.
+* The DMG includes `LICENSE`, README, and the release notes.
+* Source archives are attached to releases.
+* Build number is 12. Sparkle compares `CFBundleVersion`, so this build is newer than 0.10.1.
+
 #### 0.10.1 2026/10/14
 
 * The menu bar icon is the original Disk Arbitrator hard-disk platter, spindle, and actuator arm again. It is redrawn as a crisp vector at menu-bar size, instead of the generic SF Symbols (`shield`, `shield.fill`, `lock.fill`).

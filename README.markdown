@@ -107,7 +107,7 @@ Export the private key for GitHub Actions:
 security find-generic-password -a ed25519 -s "https://sparkle-project.org" -w
 ```
 
-Store that output as the `SPARKLE_PRIVATE_KEY` secret. `./bin/generate_keys -h` lists the current export flags if you prefer the tool’s own export over the keychain command. The public key inside the app and the private key that signs `appcast.xml` have to be the pair from the same `generate_keys` run. Sparkle compares `CFBundleVersion` (the Xcode build number), which is 11 for version 0.10.1 and must increase for the next release. Version 0.10.1 is ready to tag as `v0.10.1`.
+Store that output as the `SPARKLE_PRIVATE_KEY` secret. `./bin/generate_keys -h` lists the current export flags if you prefer the tool’s own export over the keychain command. The public key inside the app and the private key that signs `appcast.xml` have to be the pair from the same `generate_keys` run. Sparkle compares `CFBundleVersion` (the Xcode build number), which is 12 for version 0.10.2 and must increase for the next release. Version 0.10.2 (build 12) is ready to tag as `v0.10.2`.
 
 ## Releasing
 
