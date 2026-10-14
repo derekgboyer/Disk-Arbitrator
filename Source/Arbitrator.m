@@ -10,6 +10,7 @@
 #import "AppError.h"
 #import "Disk.h"
 #import "DiskArbitrationPrivateFunctions.h"
+#import "AuditLog.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -98,11 +99,14 @@
 	Log(LOG_DEBUG, @"%s disk: %@", __func__, disk.BSDName);
 
 	[self addDisksObject:disk];
+	[[AuditLog sharedLog] recordEvent:DAAuditEventAppeared disk:disk action:@"observed" message:nil];
 }
 
 - (void)diskDidDisappear:(NSNotification *)notif
 {
-	[self removeDisksObject:notif.object];
+	Disk *disk = notif.object;
+	[[AuditLog sharedLog] recordEvent:DAAuditEventDisappeared disk:disk action:@"observed" message:nil];
+	[self removeDisksObject:disk];
 }
 
 - (void)diskDidChange:(NSNotification *)notif
@@ -176,11 +180,18 @@
 		return NULL;
 	}
 
-	if (self.mountMode == MM_READONLY && !disk.rejectedMount && disk.isMountable && disk.isAttached) {
+	// Read-only mode dissents, then mounts again with rdonly. Block mode dissents and leaves it unmounted.
+	BOOL scheduleReadOnly = (self.mountMode == MM_READONLY && !disk.rejectedMount && disk.isMountable && disk.isAttached);
+	if (scheduleReadOnly) {
 		disk.rejectedMount = YES;
 		// Let diskarbitrationd finish the dissented mount before we submit our own.
 		[self performSelector:@selector(mountApprovedDisk:) withObject:disk afterDelay:0.25];
 	}
+
+	[[AuditLog sharedLog] recordEvent:DAAuditEventBlocked
+								  disk:disk
+								action:(scheduleReadOnly ? @"dissented_read_only_remount" : @"dissented")
+							   message:self.dissenterMessage];
 
 	return [self defaultDissenter];
 }

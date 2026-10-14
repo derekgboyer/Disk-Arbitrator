@@ -14,6 +14,7 @@
 #import "SheetController.h"
 #import "DiskInfoController.h"
 #import "AttachDiskImageController.h"
+#import "AuditLog.h"
 #import <ServiceManagement/ServiceManagement.h>
 #include <unistd.h>
 #include <errno.h>
@@ -103,14 +104,8 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	[self setStatusItemIconWithName:@"StatusItem Disabled 1"];
 	statusItem.menu = statusMenu;
 
-	NSInteger preferencesIndex = [statusMenu indexOfItemWithTarget:self andAction:@selector(showPreferences:)];
-	if (preferencesIndex != NSNotFound) {
-		NSMenuItem *accessItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Full Disk Access…", nil)
-		                                                     action:@selector(showFullDiskAccessHelp:)
-		                                              keyEquivalent:@""];
-		accessItem.target = self;
-		[statusMenu insertItem:accessItem atIndex:preferencesIndex + 1];
-	}
+	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Full Disk Access…", nil) action:@selector(showFullDiskAccessHelp:)];
+	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Audit Log…", nil) action:@selector(showAuditLog:)];
 	
 	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 	[center addObserver:self selector:@selector(diskDidChange:) name:DADiskDidChangeNotification object:nil];
@@ -161,6 +156,31 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 - (IBAction)showMainWindow:(id)sender
 {
 	[window makeKeyAndOrderFront:sender];
+	ActivateDiskArbitratorApp();
+}
+
+- (void)insertStatusMenuItemWithTitle:(NSString *)title action:(SEL)action
+{
+	NSInteger preferencesIndex = [statusMenu indexOfItemWithTarget:self andAction:@selector(showPreferences:)];
+	if (preferencesIndex == NSNotFound)
+		return;
+
+	NSInteger insertAt = preferencesIndex + 1;
+	while (insertAt < (NSInteger)statusMenu.numberOfItems) {
+		NSMenuItem *existing = [statusMenu itemAtIndex:insertAt];
+		if (existing.isSeparatorItem || existing.action == @selector(performActivation:) || existing.action == @selector(performDeactivation:))
+			break;
+		insertAt++;
+	}
+
+	NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:action keyEquivalent:@""];
+	item.target = self;
+	[statusMenu insertItem:item atIndex:insertAt];
+}
+
+- (IBAction)showAuditLog:(id)sender
+{
+	[[AuditLogWindowController sharedController] showWindow:sender];
 	ActivateDiskArbitratorApp();
 }
 
@@ -710,6 +730,10 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	
 	if (disk.isMounted && [disk.mountArgs containsObject:@"rdonly"] && disk.isFileSystemWritable) {
 		Log(LOG_ERR, @"Volume %@ was requested read-only but mounted writable; unmounting.", disk.BSDName);
+		[[AuditLog sharedLog] recordEvent:DAAuditEventError
+									  disk:disk
+									action:@"read_only_mount_came_up_writable"
+								   message:NSLocalizedString(@"The volume mounted writable after a read-only request. It has been unmounted.", nil)];
 		NSDictionary *info = @{
 			NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@: %@", NSLocalizedString(@"Read-only mount failed", nil), disk.BSDName],
 			NSLocalizedFailureReasonErrorKey: NSLocalizedString(@"The volume mounted writable after a read-only request. It has been unmounted.", nil),

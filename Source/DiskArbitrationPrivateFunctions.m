@@ -9,6 +9,8 @@
 
 #import "DiskArbitrationPrivateFunctions.h"
 #import "AppError.h"
+#import "AuditLog.h"
+#import "Disk.h"
 
 // Globals
 NSMutableSet *uniqueDisks;
@@ -122,6 +124,40 @@ void DiskDescriptionChangedCallback(DADiskRef diskRef, CFArrayRef keys, void *co
 	}
 }
 
+static NSString *DissenterStatusString(DADissenterRef dissenter)
+{
+	DAReturn status = DADissenterGetStatus(dissenter);
+	NSString *statusString = (NSString *)DADissenterGetStatusString(dissenter);
+	if (statusString)
+		return statusString;
+
+	IOReturn systemCode = err_get_system(status);
+	IOReturn subSystemCode = err_get_sub(status);
+	IOReturn errorCode = err_get_code(status);
+	return [NSString stringWithFormat:@"%@: system: %d; subsystem: %d; error: %d",
+		NSLocalizedString(@"Dissenter status code", nil), systemCode, subSystemCode, errorCode];
+}
+
+static void RecordMountResult(Disk *disk, DADissenterRef dissenter, NSString *statusString)
+{
+	if (![disk isKindOfClass:[Disk class]])
+		return;
+
+	if (dissenter) {
+		[[AuditLog sharedLog] recordEvent:DAAuditEventError disk:disk action:@"mount_failed" message:statusString];
+		return;
+	}
+
+	BOOL requestedReadOnly = [disk.mountArgs containsObject:@"rdonly"];
+	// A read-only request that came up writable is recorded by the app controller, which unmounts it.
+	if (requestedReadOnly && disk.isFileSystemWritable)
+		return;
+	if (requestedReadOnly || (disk.isMounted && !disk.isFileSystemWritable))
+		[[AuditLog sharedLog] recordEvent:DAAuditEventMountedReadOnly disk:disk action:@"mounted_read_only" message:nil];
+	else
+		[[AuditLog sharedLog] recordEvent:DAAuditEventMountedReadWrite disk:disk action:@"mounted_read_write" message:nil];
+}
+
 void DiskMountCallback(DADiskRef diskRef, DADissenterRef dissenter, void *context)
 {
 	NSMutableDictionary *info = nil;
@@ -143,20 +179,11 @@ void DiskMountCallback(DADiskRef diskRef, DADissenterRef dissenter, void *contex
 
 	Log(LOG_DEBUG, @"%s %@ dissenter: %p", __func__, context, dissenter);
 
+	NSString *statusString = nil;
 	if (dissenter)
 	{
 		DAReturn status = DADissenterGetStatus(dissenter);
-
-		NSString *statusString = (NSString *) DADissenterGetStatusString(dissenter);
-		if (!statusString)
-		{
-			IOReturn systemCode = err_get_system(status);
-			IOReturn subSystemCode = err_get_sub(status);
-			IOReturn errorCode = err_get_code(status);
-
-			statusString = [NSString stringWithFormat:@"%@: system: %d; subsystem: %d; error: %d",
-				NSLocalizedString(@"Dissenter status code", nil), systemCode, subSystemCode, errorCode];
-		}
+		statusString = DissenterStatusString(dissenter);
 
 		Log(LOG_INFO, @"%s %@ dissenter: (%#x) %@", __func__, context, status, statusString);
 
@@ -168,7 +195,9 @@ void DiskMountCallback(DADiskRef diskRef, DADissenterRef dissenter, void *contex
 	{
 		Log(LOG_DEBUG, @"%s disk %@ mounted", __func__, context);
 	}
-	
+
+	RecordMountResult((Disk *)context, dissenter, statusString);
+
 	[[NSNotificationCenter defaultCenter] postNotificationName:DADiskDidAttemptMountNotification object:context userInfo:info];
 }
 
@@ -184,6 +213,7 @@ void DiskUnmountCallback(DADiskRef diskRef, DADissenterRef dissenter, void *cont
 			statusString = [NSString stringWithFormat:@"Error code: %d", status];
 
 		Log(LOG_DEBUG, @"%s disk %@ dissenter: (%d) %@", __func__, context, status, statusString);
+		[[AuditLog sharedLog] recordEvent:DAAuditEventError disk:(Disk *)context action:@"unmount_failed" message:statusString];
 
 		info = [NSDictionary dictionaryWithObjectsAndKeys:
 				[NSNumber numberWithInt:status], DAStatusErrorKey,
@@ -193,6 +223,7 @@ void DiskUnmountCallback(DADiskRef diskRef, DADissenterRef dissenter, void *cont
 	}
 	else {
 		Log(LOG_DEBUG, @"%s disk %@ unmounted", __func__, context);
+		[[AuditLog sharedLog] recordEvent:DAAuditEventUnmounted disk:(Disk *)context action:@"unmounted" message:nil];
 	}
 	
 	[[NSNotificationCenter defaultCenter] postNotificationName:DADiskDidAttemptUnmountNotification object:context userInfo:info];
@@ -211,6 +242,7 @@ void DiskEjectCallback(DADiskRef diskRef, DADissenterRef dissenter, void *contex
 			statusString = [NSString stringWithFormat:@"Error code: %d", status];
 		
 		Log(LOG_INFO, @"%s disk: %@ dissenter: (%d) %@", __func__, context, status, statusString);
+		[[AuditLog sharedLog] recordEvent:DAAuditEventError disk:(Disk *)context action:@"eject_failed" message:statusString];
 		
 		info = [NSDictionary dictionaryWithObjectsAndKeys:
 				[NSNumber numberWithInt:status], DAStatusErrorKey,
@@ -220,6 +252,7 @@ void DiskEjectCallback(DADiskRef diskRef, DADissenterRef dissenter, void *contex
 	}
 	else {
 		Log(LOG_DEBUG, @"%s disk ejected: %@ ", __func__, context);
+		[[AuditLog sharedLog] recordEvent:DAAuditEventEjected disk:(Disk *)context action:@"ejected" message:nil];
 	}
 	
 	[[NSNotificationCenter defaultCenter] postNotificationName:DADiskDidAttemptEjectNotification object:context userInfo:info];
