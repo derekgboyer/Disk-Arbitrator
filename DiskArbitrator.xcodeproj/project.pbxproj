@@ -542,7 +542,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.10;
+				MARKETING_VERSION = 0.10.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "us.burghardt.Disk-Arbitrator";
 				PRODUCT_NAME = "Disk Arbitrator";
 				PROVISIONING_PROFILE = "";
@@ -574,7 +574,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.10;
+				MARKETING_VERSION = 0.10.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "us.burghardt.Disk-Arbitrator";
 				PRODUCT_NAME = "Disk Arbitrator";
 				PROVISIONING_PROFILE = "";

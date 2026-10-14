@@ -34,7 +34,7 @@ These are limits of Disk Arbitration and SIP, not optional features that were re
 * The first system mount request is rejected, and only a mount Disk Arbitrator itself just submitted is approved. That closes a gap where a second system attempt could be allowed read-write before the read-only remount started.
 * APFS containers show up as one whole disk plus a volume per container entry. Snapshot and synthesized disks that have no BSD name are ignored so they cannot crash the callback.
 * Disk icons come from Finder (`NSWorkspace`). The old kext-bundle lookup does not work when the media driver lives only in the kernel collection, which is the usual case on Apple silicon.
-* The menu-bar icon, toolbar, and disk list use SF Symbols and system colors, so they follow light mode, dark mode, and the accent color. The app icon is the same aluminum disk and colored square as before, redrawn for the current macOS icon shape.
+* The menu bar icon is the original hard-disk platter, spindle, and actuator arm, redrawn as a crisp vector (version 0.10.1). Off is a template image for light and dark menu bars. Block mounts is the green platter and read-only is the orange platter. The toolbar and disk list use SF Symbols and system colors, so they follow light mode, dark mode, and the accent color. The app icon is the same aluminum disk and colored square as before, redrawn for the current macOS icon shape.
 * Encrypted disk images ask for a password in the app. The old Authorization Services prompt stopped returning the password the user typed. Software license agreements are still answered "Yes" automatically.
 * Time Machine and other automatic mounts are blocked while Disk Arbitrator is activated. That is the same behavior as before.
 
@@ -78,7 +78,7 @@ Export the private key for GitHub Actions:
 security find-generic-password -a ed25519 -s "https://sparkle-project.org" -w
 ```
 
-Store that output as the `SPARKLE_PRIVATE_KEY` secret. `./bin/generate_keys -h` lists the current export flags if you prefer the tool’s own export over the keychain command. The public key inside the app and the private key that signs `appcast.xml` have to be the pair from the same `generate_keys` run. Sparkle compares `CFBundleVersion` (the Xcode build number), which is 11 for version 0.10 and must increase for the next release.
+Store that output as the `SPARKLE_PRIVATE_KEY` secret. `./bin/generate_keys -h` lists the current export flags if you prefer the tool’s own export over the keychain command. The public key inside the app and the private key that signs `appcast.xml` have to be the pair from the same `generate_keys` run. Sparkle compares `CFBundleVersion` (the Xcode build number), which is 11 for version 0.10.1 and must increase for the next release. Version 0.10.1 is ready to tag as `v0.10.1`.
 
 ## Releasing
 
