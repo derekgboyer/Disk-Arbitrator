@@ -30,7 +30,7 @@ extern NSString * const TrustedDiskStoreDidChangeNotification;
 
 - (TrustedDiskRule *)ruleMatchingDisk:(Disk *)disk;
 - (TrustedDiskRule *)trustDisk:(Disk *)disk error:(NSError **)error;
-- (void)removeRulesAtIndexes:(NSIndexSet *)indexes;
+- (BOOL)removeRulesAtIndexes:(NSIndexSet *)indexes error:(NSError **)error;
 
 @end
 

@@ -8,6 +8,7 @@
 
 #import "Disk.h"
 #import "AppError.h"
+#import "AuditLog.h"
 #import <DiskArbitration/DiskArbitration.h>
 #import "DiskArbitrationPrivateFunctions.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -16,10 +17,21 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+enum {
+	DAAuditMountUnmounted = 0,
+	DAAuditMountReadOnly = 1,
+	DAAuditMountReadWrite = 2
+};
+
 @interface Disk ()
 {
 	CFTypeRef disk;
+	NSInteger auditMountState;
+	BOOL auditStateKnown;
 }
+
+- (NSInteger)currentAuditMountState;
+- (void)recordAuditMountTransition;
 
 @end
 
@@ -118,6 +130,8 @@
 			}
 		}
 		[uniqueDisks addObject:self];
+		auditMountState = [self currentAuditMountState];
+		auditStateKnown = YES;
 	}
 	return self;
 }
@@ -318,12 +332,55 @@
 	return retval;
 }
 
+- (NSInteger)currentAuditMountState
+{
+	if (!self.isMounted)
+		return DAAuditMountUnmounted;
+	return self.isFileSystemWritable ? DAAuditMountReadWrite : DAAuditMountReadOnly;
+}
+
+- (void)recordAuditMountTransition
+{
+	NSInteger current = [self currentAuditMountState];
+	if (!auditStateKnown) {
+		auditMountState = current;
+		auditStateKnown = YES;
+		return;
+	}
+	if (current == auditMountState)
+		return;
+
+	NSInteger previous = auditMountState;
+	auditMountState = current;
+
+	if (previous != DAAuditMountUnmounted && current == DAAuditMountUnmounted) {
+		[[AuditLog sharedLog] recordEvent:DAAuditEventUnmounted disk:self action:@"unmounted" message:nil];
+		return;
+	}
+	if (previous == DAAuditMountUnmounted && current != DAAuditMountUnmounted) {
+		// The app controller unmounts this case and records the error itself.
+		if ([self.mountArgs containsObject:@"rdonly"] && self.isFileSystemWritable)
+			return;
+		if (current == DAAuditMountReadOnly)
+			[[AuditLog sharedLog] recordEvent:DAAuditEventMountedReadOnly disk:self action:@"mounted_read_only" message:nil];
+		else
+			[[AuditLog sharedLog] recordEvent:DAAuditEventMountedReadWrite disk:self action:@"mounted_read_write" message:nil];
+	}
+}
+
+- (void)recordAuditUnmountIfMounted
+{
+	if (!auditStateKnown || auditMountState == DAAuditMountUnmounted)
+		return;
+	auditMountState = DAAuditMountUnmounted;
+	[[AuditLog sharedLog] recordEvent:DAAuditEventUnmounted disk:self action:@"unmounted" message:nil];
+}
+
 - (void)setDiskDescription:(NSDictionary *)desc
 {
 	NSAssert(desc, @"A NULL disk description is not allowed.");
-	
-		if (desc != _diskDescription)
-	{
+
+	if (desc != _diskDescription) {
 		[self willChangeValueForKey:@"diskDescription"];
 
 		SafeCFRelease(_diskDescription);
@@ -332,6 +389,7 @@
 		icon = nil;
 
 		[self didChangeValueForKey:@"diskDescription"];
+		[self recordAuditMountTransition];
 	}
 }
 

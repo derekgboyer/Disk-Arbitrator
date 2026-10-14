@@ -207,7 +207,7 @@ static NSString * const TrustedDiskKindMedia = @"media";
 		return existing;
 	}
 
-	TrustedDiskRule *rule = [TrustedDiskRule new];
+	TrustedDiskRule *rule = [[[TrustedDiskRule alloc] init] autorelease];
 	rule.identifier = identifier.uppercaseString;
 	rule.kind = kind;
 	rule.displayName = [self displayNameForDisk:disk];
@@ -215,11 +215,14 @@ static NSString * const TrustedDiskKindMedia = @"media";
 	rule.fileSystem = DAStringFromDescriptionValue(disk.diskDescription[(NSString *)kDADiskDescriptionVolumeKindKey]) ?: @"";
 	rule.addedAt = [self.timestampFormatter stringFromDate:[NSDate date]] ?: @"";
 
-	NSMutableArray *rules = [self.rules mutableCopy];
-	[rules addObject:rule];
-	self.rules = rules;
+	NSMutableArray *updated = [[self.rules mutableCopy] autorelease];
+	[updated addObject:rule];
+	NSArray *previous = [[self.rules copy] autorelease];
+	self.rules = updated;
 	NSError *saveError = nil;
 	BOOL saved = [self saveRules:&saveError];
+	if (!saved)
+		self.rules = previous;
 	[self.lock unlock];
 
 	if (!saved) {
@@ -231,17 +234,27 @@ static NSString * const TrustedDiskKindMedia = @"media";
 	return rule;
 }
 
-- (void)removeRulesAtIndexes:(NSIndexSet *)indexes
+- (BOOL)removeRulesAtIndexes:(NSIndexSet *)indexes error:(NSError **)error
 {
 	if (indexes.count == 0)
-		return;
+		return YES;
 	[self.lock lock];
-	NSMutableArray *rules = [self.rules mutableCopy];
-	[rules removeObjectsAtIndexes:indexes];
-	self.rules = rules;
-	[self saveRules:nil];
+	NSMutableArray *updated = [[self.rules mutableCopy] autorelease];
+	[updated removeObjectsAtIndexes:indexes];
+	NSArray *previous = [[self.rules copy] autorelease];
+	self.rules = updated;
+	NSError *saveError = nil;
+	BOOL saved = [self saveRules:&saveError];
+	if (!saved)
+		self.rules = previous;
 	[self.lock unlock];
+	if (!saved) {
+		if (error)
+			*error = saveError;
+		return NO;
+	}
 	[self postChange];
+	return YES;
 }
 
 @end
@@ -375,7 +388,13 @@ static NSString * const TrustedDiskKindMedia = @"media";
 
 - (void)remove:(id)sender
 {
-	[[TrustedDiskStore sharedStore] removeRulesAtIndexes:self.tableView.selectedRowIndexes];
+	NSError *error = nil;
+	if (![[TrustedDiskStore sharedStore] removeRulesAtIndexes:self.tableView.selectedRowIndexes error:&error]) {
+		if (error)
+			[[NSAlert alertWithError:error] beginSheetModalForWindow:self.window completionHandler:nil];
+		return;
+	}
+	[self.tableView deselectAll:nil];
 }
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView

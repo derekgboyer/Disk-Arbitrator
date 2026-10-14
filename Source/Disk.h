@@ -62,5 +62,7 @@ enum {
 - (void)mountAtPath:(NSString *)path withArguments:(NSArray *)args;
 - (void)unmountWithOptions:(NSUInteger)options;
 - (void)eject;
+/* Logs unmounted when a volume disappears while still mounted. */
+- (void)recordAuditUnmountIfMounted;
 
 @end

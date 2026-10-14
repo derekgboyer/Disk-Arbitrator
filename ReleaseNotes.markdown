@@ -2,7 +2,7 @@
 
 #### 0.10 2026/10/14
 
-* Audit log. Disk appear, disappear, block, read-only mount, read-write mount, unmount, eject, error, and trusted-rule events are appended as JSON Lines to `~/Library/Logs/Disk Arbitrator/audit.jsonl`. Audit Log… shows the recent entries and can export the whole file as CSV or JSON.
+* Audit log. Disk appear, disappear, block, read-only mount, read-write mount, unmount, eject, error, and trusted-rule events are appended as JSON Lines to `~/Library/Logs/Disk Arbitrator/audit.jsonl`. Timestamps are UTC. Mount and unmount lines follow the volume path, including mounts macOS performs for a trusted disk and unmounts started outside the app. A disk that is already mounted at launch is `appeared` only. Audit Log… shows the recent entries and can export the whole file as CSV or JSON.
 * Trusted disks. Trust Selected Disk remembers a volume UUID (or the media UUID when there is no volume UUID). That disk mounts normally. Block Mounts and Read-only still apply to every other disk. Matches are written to the audit log. Rules are stored in `~/Library/Application Support/Disk Arbitrator/trusted-disks.json`.
 * Sparkle 2 checks `https://github.com/derekgboyer/Disk-Arbitrator/releases/latest/download/appcast.xml`. Check for Updates… is in the status menu. Settings has “Check for updates automatically.” The updater does not start until the EdDSA public key is in the `SU_PUBLIC_ED_KEY` build setting. The private key is not in this repository.
 * A push of a `v*` tag builds a universal Release app, uploads a DMG and a zip, and updates `appcast.xml` on the GitHub release. Developer ID signing and notarization run when the repository secrets below are set. Without them the artifact is ad-hoc signed with the hardened runtime.

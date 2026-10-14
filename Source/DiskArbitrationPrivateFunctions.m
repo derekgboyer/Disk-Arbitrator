@@ -100,6 +100,8 @@ void DiskDisappearedCallback(DADiskRef diskRef, void *context)
 	if (!tmpDisk) {
 		return;
 	}
+
+	[tmpDisk recordAuditUnmountIfMounted];
 	
 	[[NSNotificationCenter defaultCenter] postNotificationName:DADiskDidDisappearNotification object:tmpDisk];
 	
@@ -143,19 +145,10 @@ static void RecordMountResult(Disk *disk, DADissenterRef dissenter, NSString *st
 	if (![disk isKindOfClass:[Disk class]])
 		return;
 
-	if (dissenter) {
+	// A successful mount or unmount is recorded when the volume path changes.
+	// This callback only records failures of a mount Disk Arbitrator itself submitted.
+	if (dissenter)
 		[[AuditLog sharedLog] recordEvent:DAAuditEventError disk:disk action:@"mount_failed" message:statusString];
-		return;
-	}
-
-	BOOL requestedReadOnly = [disk.mountArgs containsObject:@"rdonly"];
-	// A read-only request that came up writable is recorded by the app controller, which unmounts it.
-	if (requestedReadOnly && disk.isFileSystemWritable)
-		return;
-	if (requestedReadOnly || (disk.isMounted && !disk.isFileSystemWritable))
-		[[AuditLog sharedLog] recordEvent:DAAuditEventMountedReadOnly disk:disk action:@"mounted_read_only" message:nil];
-	else
-		[[AuditLog sharedLog] recordEvent:DAAuditEventMountedReadWrite disk:disk action:@"mounted_read_write" message:nil];
 }
 
 void DiskMountCallback(DADiskRef diskRef, DADissenterRef dissenter, void *context)
@@ -223,7 +216,18 @@ void DiskUnmountCallback(DADiskRef diskRef, DADissenterRef dissenter, void *cont
 	}
 	else {
 		Log(LOG_DEBUG, @"%s disk %@ unmounted", __func__, context);
-		[[AuditLog sharedLog] recordEvent:DAAuditEventUnmounted disk:(Disk *)context action:@"unmounted" message:nil];
+		if (diskRef && [((id)context) isKindOfClass:[Disk class]]) {
+			Disk *disk = (Disk *)context;
+			CFDictionaryRef desc = DADiskCopyDescription(diskRef);
+			if (desc) {
+				disk.diskDescription = (NSDictionary *)desc;
+				CFRelease(desc);
+			}
+			// The description update logs the unmount when the volume path is gone.
+			// If that copy still shows a path, a later description change records it.
+			if (!disk.isMounted)
+				[disk recordAuditUnmountIfMounted];
+		}
 	}
 	
 	[[NSNotificationCenter defaultCenter] postNotificationName:DADiskDidAttemptUnmountNotification object:context userInfo:info];

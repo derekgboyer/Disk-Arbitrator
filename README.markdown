@@ -42,7 +42,7 @@ These are limits of Disk Arbitration and SIP, not optional features that were re
 
 Every disk event is appended to `~/Library/Logs/Disk Arbitrator/audit.jsonl`. The file is JSON Lines: one JSON object per line. The fields are `timestamp`, `event`, `action`, `message`, `bsdName`, `volumeName`, `volumeUUID`, `mediaUUID`, `fileSystem`, `mediaName`, `deviceModel`, `deviceProtocol`, and `mediaSize`.
 
-Events are `appeared`, `disappeared`, `blocked`, `mounted_read_only`, `mounted_read_write`, `unmounted`, `ejected`, `error`, and `rule_matched`. Launch records disks that are already attached as `appeared`. The log is append-only from the app’s point of view. It is an ordinary file in your home directory, so it is an operational record, not a sealed evidence store.
+Events are `appeared`, `disappeared`, `blocked`, `mounted_read_only`, `mounted_read_write`, `unmounted`, `ejected`, `error`, and `rule_matched`. Timestamps are UTC. Launch records disks that are already attached as `appeared`, including ones that are already mounted. A later mount or unmount is recorded when Disk Arbitration reports the volume path, so a trusted disk that macOS mounts itself, and an unmount started in Finder, are included. A volume that disappears while still mounted is recorded as `unmounted` and then `disappeared`. The log is append-only from the app’s point of view. It is an ordinary file in your home directory, so it is an operational record, not a sealed evidence store.
 
 **Audit Log…** in the status menu shows the newest entries (up to 5,000 on screen). Export JSON writes the whole file as a JSON array. Export CSV writes the same rows. Reveal in Finder opens the log.
 

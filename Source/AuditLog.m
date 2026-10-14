@@ -126,7 +126,7 @@ static NSString *DACSVEscape(id value)
 		_writeLock = [NSLock new];
 		_timestampFormatter = [NSISO8601DateFormatter new];
 		_timestampFormatter.formatOptions = NSISO8601DateFormatWithInternetDateTime | NSISO8601DateFormatWithFractionalSeconds;
-		_timestampFormatter.timeZone = [NSTimeZone localTimeZone];
+		_timestampFormatter.timeZone = [NSTimeZone timeZoneWithName:@"UTC"];
 
 		NSFileManager *files = [NSFileManager defaultManager];
 		NSURL *library = [files URLsForDirectory:NSLibraryDirectory inDomains:NSUserDomainMask].firstObject;
