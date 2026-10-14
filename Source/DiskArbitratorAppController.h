@@ -11,6 +11,10 @@
 @class Arbitrator;
 @class Disk;
 
+// YES when SUFeedURL and SUPublicEDKey are both non-empty after the build.
+// An empty string or an unexpanded $(SPARKLE_...) value means update checks stay off.
+BOOL DiskArbitratorSparkleUpdatesConfigured(void);
+
 @interface AppController : NSObject <NSToolbarItemValidation, NSMenuItemValidation> // <NSApplicationDelegate>
 
 @property (assign) IBOutlet NSPanel *window;

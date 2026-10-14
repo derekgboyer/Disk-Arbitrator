@@ -136,6 +136,8 @@
 		F59400061SMFW /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ServiceManagement.framework; path = System/Library/Frameworks/ServiceManagement.framework; sourceTree = SDKROOT; };
 		F59400081PRIVACY /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F594E2010000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
+		F594F0010000000000000001 /* Sparkle.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Sparkle.xcconfig; sourceTree = "<group>"; };
+		F594F0030000000000000003 /* Sparkle.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Sparkle.xcconfig.example; sourceTree = "<group>"; };
 		F594A1010000000000000001 /* AuditLog.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AuditLog.h; sourceTree = "<group>"; };
 		F594A1020000000000000002 /* AuditLog.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AuditLog.m; sourceTree = "<group>"; };
 		F594B1010000000000000001 /* TrustedDiskStore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TrustedDiskStore.h; sourceTree = "<group>"; };
@@ -222,6 +224,7 @@
 		29B97314FDCFA39411CA2CEA /* DiskArbitrator */ = {
 			isa = PBXGroup;
 			children = (
+				F594F0020000000000000002 /* Config */,
 				080E96DDFE201D6D7F000001 /* Classes */,
 				29B97315FDCFA39411CA2CEA /* Other Sources */,
 				29B97317FDCFA39411CA2CEA /* Resources */,
@@ -286,6 +289,15 @@
 			name = Images;
 			sourceTree = "<group>";
 		};
+		F594F0020000000000000002 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				F594F0010000000000000001 /* Sparkle.xcconfig */,
+				F594F0030000000000000003 /* Sparkle.xcconfig.example */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
 		A532F1F31B93C4A0007DC4FD /* Nibs */ = {
 			isa = PBXGroup;
 			children = (
@@ -309,6 +321,7 @@
 				8D11072C0486CEB800E47090 /* Sources */,
 				8D11072E0486CEB800E47090 /* Frameworks */,
 				F59400031COPYPHASE /* Copy Launch Agent */,
+				F594F0040000000000000004 /* Normalize Sparkle Info.plist */,
 			);
 			buildRules = (
 				9654B73F111DE27C00E9B0C4 /* PBXBuildRule */,
@@ -410,6 +423,23 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/Source/build_dmg.sh\" \"Disk Arbitrator\"\n";
+		};
+		F594F0040000000000000004 /* Normalize Sparkle Info.plist */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+				"$(SRCROOT)/scripts/normalize_sparkle_info_plist.py",
+			);
+			name = "Normalize Sparkle Info.plist";
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/sparkle-info-plist-normalized",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ -x /usr/bin/python3 ]; then\n  exec /usr/bin/python3 \"${SRCROOT}/scripts/normalize_sparkle_info_plist.py\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" \"${DERIVED_FILE_DIR}/sparkle-info-plist-normalized\"\nfi\nexec python3 \"${SRCROOT}/scripts/normalize_sparkle_info_plist.py\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" \"${DERIVED_FILE_DIR}/sparkle-info-plist-normalized\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -519,6 +549,7 @@
 		};
 		C01FCF4B08A954540054247B /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F594F0010000000000000001 /* Sparkle.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -547,12 +578,12 @@
 				PRODUCT_NAME = "Disk Arbitrator";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				SU_PUBLIC_ED_KEY = "kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=";
 			};
 			name = Debug;
 		};
 		C01FCF4C08A954540054247B /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F594F0010000000000000001 /* Sparkle.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -579,7 +610,6 @@
 				PRODUCT_NAME = "Disk Arbitrator";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				SU_PUBLIC_ED_KEY = "kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=";
 			};
 			name = Release;
 		};
@@ -628,6 +658,8 @@
 					arm64,
 					x86_64,
 				);
+				SPARKLE_FEED_URL = "";
+				SPARKLE_PUBLIC_ED_KEY = "";
 			};
 			name = Debug;
 		};
@@ -674,6 +706,8 @@
 					arm64,
 					x86_64,
 				);
+				SPARKLE_FEED_URL = "";
+				SPARKLE_PUBLIC_ED_KEY = "";
 			};
 			name = Release;
 		};

@@ -6,6 +6,7 @@
 * Off is a template image, so it is correct on light and dark menu bars.
 * Block mounts stays the original green platter. Read-only stays the original orange platter. Both have a dark-menu-bar variant with a light arm and stroke.
 * Build number is 11. Sparkle compares `CFBundleVersion`. Version 0.10 was already tagged; this release is ready to tag as `v0.10.1`.
+* Sparkle’s appcast URL and EdDSA public key are the build settings `SPARKLE_FEED_URL` and `SPARKLE_PUBLIC_ED_KEY`. This fork’s defaults are in `Config/Sparkle.xcconfig`. With either one empty, Check for Updates and the Settings update controls stay hidden.
 
 #### 0.10 2026/10/14
 

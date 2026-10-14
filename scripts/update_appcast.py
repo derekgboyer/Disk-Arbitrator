@@ -23,11 +23,11 @@ def item_version(item):
     return (node.text or "").strip() if node is not None else ""
 
 
-def new_tree():
+def new_tree(link):
     rss = ET.Element("rss", {"version": "2.0"})
     channel = ET.SubElement(rss, "channel")
     ET.SubElement(channel, "title").text = "Disk Arbitrator"
-    ET.SubElement(channel, "link").text = "https://github.com/derekgboyer/Disk-Arbitrator"
+    ET.SubElement(channel, "link").text = link or "https://github.com"
     ET.SubElement(channel, "description").text = "Disk Arbitrator updates"
     ET.SubElement(channel, "language").text = "en"
     return ET.ElementTree(rss)
@@ -94,10 +94,11 @@ def main():
     parser.add_argument("--ed-signature", default="")
     parser.add_argument("--minimum-system-version", default="13.0")
     parser.add_argument("--title", default="")
+    parser.add_argument("--link", default="", help="Channel link for a newly created appcast. The release workflow passes https://github.com/<owner>/<repo>.")
     args = parser.parse_args()
 
     destination = Path(args.appcast)
-    tree = load(destination) if destination.is_file() else new_tree()
+    tree = load(destination) if destination.is_file() else new_tree(args.link)
     channel = channel_of(tree)
 
     if args.version:

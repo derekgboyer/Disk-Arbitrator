@@ -50,24 +50,37 @@ jobs:
           echo "mode=developer-id" >> "$GITHUB_OUTPUT"
 
       - name: Build universal Release
+        env:
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY || secrets.SPARKLE_PUBLIC_ED_KEY }}
         run: |
           set -euo pipefail
           SIGN_ID="${{ steps.sign.outputs.identity }}"
           if [ -z "$SIGN_ID" ]; then
             SIGN_ID="-"
           fi
-          xcodebuild \
-            -project DiskArbitrator.xcodeproj \
-            -scheme DiskArbitrator \
-            -configuration Release \
-            -derivedDataPath "${RUNNER_TEMP}/disk-arbitrator" \
-            ONLY_ACTIVE_ARCH=NO \
-            ARCHS="arm64 x86_64" \
-            CODE_SIGN_IDENTITY="$SIGN_ID" \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="" \
-            SU_PUBLIC_ED_KEY="kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=" \
-            build
+          FEED_URL="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/appcast.xml"
+          echo "SPARKLE_FEED_URL=${FEED_URL}"
+          XCODE_ARGS=(
+            -project DiskArbitrator.xcodeproj
+            -scheme DiskArbitrator
+            -configuration Release
+            -derivedDataPath "${RUNNER_TEMP}/disk-arbitrator"
+            ONLY_ACTIVE_ARCH=NO
+            "ARCHS=arm64 x86_64"
+            "CODE_SIGN_IDENTITY=${SIGN_ID}"
+            CODE_SIGN_STYLE=Manual
+            DEVELOPMENT_TEAM=""
+            "SPARKLE_FEED_URL=${FEED_URL}"
+          )
+          if [ -n "${SPARKLE_PUBLIC_ED_KEY}" ]; then
+            echo "Passing SPARKLE_PUBLIC_ED_KEY from the repository variable or secret."
+            XCODE_ARGS+=("SPARKLE_PUBLIC_ED_KEY=${SPARKLE_PUBLIC_ED_KEY}")
+          else
+            echo "SPARKLE_PUBLIC_ED_KEY is not set as a repository variable or secret."
+            echo "The build uses Config/Sparkle.xcconfig when that file sets the key."
+            echo "Set the SPARKLE_PUBLIC_ED_KEY variable so a release does not depend on the xcconfig."
+          fi
+          xcodebuild "${XCODE_ARGS[@]}" build
           APP="${RUNNER_TEMP}/disk-arbitrator/Build/Products/Release/Disk Arbitrator.app"
           BINARY="${APP}/Contents/MacOS/Disk Arbitrator"
           test -d "$APP"
@@ -178,6 +191,7 @@ jobs:
             find "${RUNNER_TEMP}/previous-zips" -name '*.zip' -exec cp {} "$ARCHIVES/" \;
           fi
           PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/"
+          REPO_LINK="https://github.com/${GITHUB_REPOSITORY}"
           APPCAST="${RUNNER_TEMP}/dist/appcast.xml"
           SIGNATURE=""
           if [ -n "${SPARKLE_PRIVATE_KEY}" ]; then
@@ -205,6 +219,7 @@ jobs:
               python3 scripts/update_appcast.py \
                 --appcast "$APPCAST" \
                 --preserve-from "$PREVIOUS" \
+                --link "$REPO_LINK" \
                 --version "$BUILD" \
                 --short-version "$VERSION" \
                 --url "${PREFIX}$(basename "$ZIP")" \
@@ -217,6 +232,7 @@ jobs:
             python3 scripts/update_appcast.py \
               --appcast "$APPCAST" \
               --preserve-from "$PREVIOUS" \
+              --link "$REPO_LINK" \
               --version "$BUILD" \
               --short-version "$VERSION" \
               --url "${PREFIX}$(basename "$ZIP")" \
@@ -224,7 +240,7 @@ jobs:
               --title "Version ${VERSION}"
           fi
           if [ -f "$PREVIOUS" ]; then
-            python3 scripts/update_appcast.py --appcast "$APPCAST" --preserve-from "$PREVIOUS"
+            python3 scripts/update_appcast.py --appcast "$APPCAST" --preserve-from "$PREVIOUS" --link "$REPO_LINK"
           fi
           test -f "$APPCAST"
 
