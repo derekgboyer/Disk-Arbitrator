@@ -25,6 +25,30 @@
 static NSString * const LaunchAgentPlistName = @"us.burghardt.Disk-Arbitrator.plist";
 static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 
+static NSString *DiskArbitratorSparkleInfoString(NSString *key)
+{
+	id value = [[NSBundle mainBundle] objectForInfoDictionaryKey:key];
+	if (![value isKindOfClass:[NSString class]])
+		return @"";
+	return [(NSString *)value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
+static BOOL DiskArbitratorSparkleInfoStringIsConfigured(NSString *value)
+{
+	if (value.length == 0)
+		return NO;
+	// Unexpanded build setting, for example "$(SPARKLE_PUBLIC_ED_KEY)".
+	if ([value rangeOfString:@"$("].location != NSNotFound)
+		return NO;
+	return YES;
+}
+
+BOOL DiskArbitratorSparkleUpdatesConfigured(void)
+{
+	return DiskArbitratorSparkleInfoStringIsConfigured(DiskArbitratorSparkleInfoString(@"SUFeedURL"))
+		&& DiskArbitratorSparkleInfoStringIsConfigured(DiskArbitratorSparkleInfoString(@"SUPublicEDKey"));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 @interface AppController ()
@@ -165,7 +189,8 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Audit Log…", nil) action:@selector(showAuditLog:)];
 	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Trusted Disks…", nil) action:@selector(showTrustedDisks:)];
 	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Trust Selected Disk", nil) action:@selector(trustSelectedDisk:)];
-	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Check for Updates…", nil) action:@selector(checkForUpdates:)];
+	if (DiskArbitratorSparkleUpdatesConfigured())
+		[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Check for Updates…", nil) action:@selector(checkForUpdates:)];
 	
 	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 	[center addObserver:self selector:@selector(diskDidChange:) name:DADiskDidChangeNotification object:nil];
@@ -276,6 +301,11 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
 {
 	if (menuItem.action == @selector(checkForUpdates:)) {
+		if (!DiskArbitratorSparkleUpdatesConfigured()) {
+			menuItem.hidden = YES;
+			return NO;
+		}
+		menuItem.hidden = NO;
 		if (!self.updaterController)
 			return YES;
 		return self.updaterController.updater.canCheckForUpdates;
@@ -303,34 +333,17 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	return YES;
 }
 
-- (BOOL)sparkleIsConfigured
-{
-	NSString *key = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"SUPublicEDKey"];
-	if (![key isKindOfClass:[NSString class]])
-		return NO;
-	NSString *trimmed = [key stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-	if (trimmed.length == 0 || [trimmed containsString:@"$("])
-		return NO;
-	return YES;
-}
-
 - (void)prepareUpdater
 {
-	if (!self.sparkleIsConfigured || self.updaterController)
+	if (!DiskArbitratorSparkleUpdatesConfigured() || self.updaterController)
 		return;
 	self.updaterController = [[SPUStandardUpdaterController alloc] initWithStartingUpdater:YES updaterDelegate:nil userDriverDelegate:nil];
 }
 
 - (IBAction)checkForUpdates:(id)sender
 {
-	if (!self.updaterController) {
-		NSAlert *alert = [[NSAlert alloc] init];
-		alert.messageText = NSLocalizedString(@"Updates are not configured", nil);
-		alert.informativeText = NSLocalizedString(@"Check for Updates needs Sparkle’s public key in SUPublicEDKey. The committed key is the SU_PUBLIC_ED_KEY build setting. Keep the private key out of the repository. The release workflow signs the appcast with the SPARKLE_PRIVATE_KEY secret.", nil);
-		[alert addButtonWithTitle:NSLocalizedString(@"OK", nil)];
-		[alert runModal];
+	if (!DiskArbitratorSparkleUpdatesConfigured() || !self.updaterController)
 		return;
-	}
 	[self.updaterController checkForUpdates:sender];
 }
 

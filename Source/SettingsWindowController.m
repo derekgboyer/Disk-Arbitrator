@@ -28,7 +28,8 @@
 {
 	self = [super initWithWindow:nil];
 	if (self) {
-		NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 480, 460)
+		CGFloat windowHeight = DiskArbitratorSparkleUpdatesConfigured() ? 460 : 360;
+		NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 480, windowHeight)
 														styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable)
 														  backing:NSBackingStoreBuffered
 															defer:NO];
@@ -71,31 +72,35 @@
 {
 	self.startupCheckbox = [self checkboxWithTitle:NSLocalizedString(@"Show main window at startup", nil) key:@"ShowMainWindowAtStartup"];
 	self.activationCheckbox = [self checkboxWithTitle:NSLocalizedString(@"Show main window at activation", nil) key:@"ShowMainWindowAtActivate"];
-	self.updatesCheckbox = [self checkboxWithTitle:NSLocalizedString(@"Check for updates automatically", nil) key:@"SUEnableAutomaticChecks"];
 
 	NSButton *auditButton = [NSButton buttonWithTitle:NSLocalizedString(@"Audit Log…", nil) target:self action:@selector(showAuditLog:)];
 	NSButton *trustedButton = [NSButton buttonWithTitle:NSLocalizedString(@"Trusted Disks…", nil) target:self action:@selector(showTrustedDisks:)];
-	NSButton *updatesButton = [NSButton buttonWithTitle:NSLocalizedString(@"Check for Updates…", nil) target:self action:@selector(checkForUpdates:)];
 	auditButton.bezelStyle = NSBezelStyleRounded;
 	trustedButton.bezelStyle = NSBezelStyleRounded;
-	updatesButton.bezelStyle = NSBezelStyleRounded;
 
 	NSStackView *diskButtons = [NSStackView stackViewWithViews:@[auditButton, trustedButton]];
 	diskButtons.orientation = NSUserInterfaceLayoutOrientationHorizontal;
 	diskButtons.spacing = 8;
 
-	NSStackView *stack = [NSStackView stackViewWithViews:@[
+	NSMutableArray *rows = [NSMutableArray arrayWithObjects:
 		[self sectionLabel:NSLocalizedString(@"General", nil)],
 		self.startupCheckbox,
 		self.activationCheckbox,
 		[self sectionLabel:NSLocalizedString(@"Protection", nil)],
 		[self bodyLabel:NSLocalizedString(@"Trusted disks mount normally. Block Mounts and Read-only still apply to every other disk. The audit log is an append-only JSON Lines file in ~/Library/Logs/Disk Arbitrator/.", nil)],
 		diskButtons,
-		[self sectionLabel:NSLocalizedString(@"Updates", nil)],
-		self.updatesCheckbox,
-		[self bodyLabel:NSLocalizedString(@"Automatic checks use Sparkle and the GitHub appcast. The EdDSA public key is included in the app. The private key stays out of the app.", nil)],
-		updatesButton
-	]];
+		nil];
+	if (DiskArbitratorSparkleUpdatesConfigured()) {
+		self.updatesCheckbox = [self checkboxWithTitle:NSLocalizedString(@"Check for updates automatically", nil) key:@"SUEnableAutomaticChecks"];
+		NSButton *updatesButton = [NSButton buttonWithTitle:NSLocalizedString(@"Check for Updates…", nil) target:self action:@selector(checkForUpdates:)];
+		updatesButton.bezelStyle = NSBezelStyleRounded;
+		[rows addObject:[self sectionLabel:NSLocalizedString(@"Updates", nil)]];
+		[rows addObject:self.updatesCheckbox];
+		[rows addObject:[self bodyLabel:NSLocalizedString(@"Automatic checks use Sparkle and the appcast URL from this build. The EdDSA public key is included in the app. The private key stays out of the app.", nil)]];
+		[rows addObject:updatesButton];
+	}
+
+	NSStackView *stack = [NSStackView stackViewWithViews:rows];
 	stack.orientation = NSUserInterfaceLayoutOrientationVertical;
 	stack.alignment = NSLayoutAttributeLeading;
 	stack.spacing = 8;
@@ -121,7 +126,10 @@
 
 - (void)refreshCheckboxes
 {
-	for (NSButton *button in @[self.startupCheckbox, self.activationCheckbox, self.updatesCheckbox]) {
+	NSMutableArray *buttons = [NSMutableArray arrayWithObjects:self.startupCheckbox, self.activationCheckbox, nil];
+	if (self.updatesCheckbox)
+		[buttons addObject:self.updatesCheckbox];
+	for (NSButton *button in buttons) {
 		button.state = [[NSUserDefaults standardUserDefaults] boolForKey:button.identifier] ? NSControlStateValueOn : NSControlStateValueOff;
 	}
 }

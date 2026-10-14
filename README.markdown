@@ -54,15 +54,44 @@ While Disk Arbitrator is activated, a matching disk is allowed to mount the way 
 
 ## Updates
 
-The app links Sparkle 2 with Swift Package Manager. **Check for Updates…** reads:
+The app links Sparkle 2 with Swift Package Manager. **Check for Updates…** and the Settings update controls are shown only when the build has both an appcast URL and an EdDSA public key. If either one is missing or empty, those controls stay hidden and Sparkle is not started. There is no missing-key alert on that path.
 
-`https://github.com/derekgboyer/Disk-Arbitrator/releases/latest/download/appcast.xml`
+`Resources/DiskArbitrator-Info.plist` does not hardcode a repository. It substitutes two Xcode build settings:
 
-**Settings…** includes “Check for updates automatically” (`SUEnableAutomaticChecks`). That schedules a check. It does not install an update by itself.
+| Build setting | Info.plist key |
+| --- | --- |
+| `SPARKLE_FEED_URL` | `SUFeedURL` |
+| `SPARKLE_PUBLIC_ED_KEY` | `SUPublicEDKey` |
 
-The EdDSA public key is committed. `SUPublicEDKey` in `Resources/DiskArbitrator-Info.plist` is `kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=`. The Xcode build setting `SU_PUBLIC_ED_KEY` is the same value for Debug and Release, and the release workflow passes that value into the build. A build with an empty key, or with the old `$(SU_PUBLIC_ED_KEY)` placeholder left unexpanded, leaves Check for Updates idle and explains what is missing instead of showing Sparkle’s missing-key alert.
+The plist values are `$(SPARKLE_FEED_URL:default=)` and `$(SPARKLE_PUBLIC_ED_KEY:default=)`. An empty or unset setting expands to an empty string, which this app treats as updates off. A build-phase script also clears a leftover `$(SPARKLE_...)` literal so it cannot ship in the app. The private signing key is not required to build.
 
-The matching private key is not in the repository. Store it as the `SPARKLE_PRIVATE_KEY` GitHub Actions secret. The release workflow passes that secret to `generate_appcast` and `sign_update`. Do not commit the private key, and do not paste it into a pull request.
+### This fork
+
+`Config/Sparkle.xcconfig` is the committed default for derekgboyer/Disk-Arbitrator. Local builds use:
+
+* Feed URL: `https://github.com/derekgboyer/Disk-Arbitrator/releases/latest/download/appcast.xml`
+* Public key: `kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=`
+
+Upstream, or another fork, should replace or clear those two lines. Clearing them still builds, and update checks stay off. xcconfig treats `//` as a comment, so the feed URL is written with `$(SPARKLE_URL_SLASH)` between `https:` and the host.
+
+Optional local override, not committed:
+
+```
+cp Config/Sparkle.xcconfig.example Config/Sparkle.local.xcconfig
+```
+
+`Config/Sparkle.xcconfig` includes `Sparkle.local.xcconfig` when that file exists. Put your own feed URL and public key there. `Config/Sparkle.local.xcconfig` is gitignored.
+
+### Release workflow
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which passes:
+
+* `SPARKLE_FEED_URL=https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/appcast.xml`
+* `SPARKLE_PUBLIC_ED_KEY` from the repository **variable** `SPARKLE_PUBLIC_ED_KEY`, or from a secret of the same name when the variable is empty
+
+That feed URL follows whichever repository runs the workflow. It is not hardcoded to this fork. Set the variable under Settings → Secrets and variables → Actions → Variables. The public key is safe to store as a variable. For this fork, set it to `kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=`. If the variable and the secret are both empty, the release build keeps the public key from `Config/Sparkle.xcconfig`.
+
+The private key stays the `SPARKLE_PRIVATE_KEY` secret. The workflow passes it to `generate_appcast` and `sign_update` when it is present. Do not commit the private key, and do not paste it into a pull request.
 
 To rotate the pair, generate it once on a Mac from the Sparkle 2 tools archive (`generate_keys` is inside the `.tar.xz` on the [Sparkle releases](https://github.com/sparkle-project/Sparkle/releases)):
 
@@ -70,7 +99,7 @@ To rotate the pair, generate it once on a Mac from the Sparkle 2 tools archive (
 ./bin/generate_keys
 ```
 
-The tool prints the public key and stores the private key in your login keychain (account `ed25519`, service `https://sparkle-project.org`). Replace `SUPublicEDKey` and `SU_PUBLIC_ED_KEY` with the printed public key.
+The tool prints the public key and stores the private key in your login keychain (account `ed25519`, service `https://sparkle-project.org`). Put the printed public key in `SPARKLE_PUBLIC_ED_KEY` (`Config/Sparkle.xcconfig` or `Config/Sparkle.local.xcconfig`, and the repository variable).
 
 Export the private key for GitHub Actions:
 
@@ -84,9 +113,15 @@ Store that output as the `SPARKLE_PRIVATE_KEY` secret. `./bin/generate_keys -h` 
 
 Pull requests and branch pushes run `.github/workflows/build.yml`, which builds the universal Release app.
 
-Pushing a tag named `v*` (for example `v0.10`) runs `.github/workflows/release.yml` on a macOS runner. It builds the universal Release app, uploads a zip and a DMG to the GitHub release, and writes `appcast.xml` onto that same release so the feed URL above keeps working. The feed item points at the zip. Older appcast items are kept when a previous release already has `appcast.xml`.
+Pushing a tag named `v*` (for example `v0.10`) runs `.github/workflows/release.yml` on a macOS runner. It builds the universal Release app, uploads a zip and a DMG to the GitHub release, and writes `appcast.xml` onto that same release. The feed item points at the zip. Older appcast items are kept when a previous release already has `appcast.xml`. The app’s feed URL is `https://github.com/<owner>/<repo>/releases/latest/download/appcast.xml` for the repository that ran the workflow.
 
-Signing and notarization are optional. With none of the secrets below, the workflow ad-hoc signs the app (`codesign` identity `-`, hardened runtime) and still uploads the zip, DMG, and appcast. The public key is already in the app. An appcast built without `SPARKLE_PRIVATE_KEY` has no EdDSA signature. Sparkle will reject that feed until you add the key and publish again.
+Signing and notarization are optional. With none of the secrets below, the workflow ad-hoc signs the app (`codesign` identity `-`, hardened runtime) and still uploads the zip, DMG, and appcast. An appcast built without `SPARKLE_PRIVATE_KEY` has no EdDSA signature. Sparkle will reject that feed until you add the key and publish again.
+
+Set the public key as an Actions variable (it is not a secret):
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `SPARKLE_PUBLIC_ED_KEY` | For in-app update checks on a CI release | EdDSA public key passed into the app as `SPARKLE_PUBLIC_ED_KEY`. A secret of the same name is used only when the variable is empty |
 
 Set these under the repository’s Actions secrets:
 

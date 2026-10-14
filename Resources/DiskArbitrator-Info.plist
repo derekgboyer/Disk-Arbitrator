@@ -23,9 +23,9 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>SUFeedURL</key>
-	<string>https://github.com/derekgboyer/Disk-Arbitrator/releases/latest/download/appcast.xml</string>
+	<string>$(SPARKLE_FEED_URL:default=)</string>
 	<key>SUPublicEDKey</key>
-	<string>kwGfxsca37dMWVwYY/YElw+U+vF6QDXHnXbqCpWNm18=</string>
+	<string>$(SPARKLE_PUBLIC_ED_KEY:default=)</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>LSMinimumSystemVersion</key>
