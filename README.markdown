@@ -115,7 +115,9 @@ Pull requests and branch pushes run `.github/workflows/build.yml`, which builds 
 
 Pushing a tag named `v*` (for example `v0.10`) runs `.github/workflows/release.yml` on a macOS runner. It builds the universal Release app, uploads a zip and a DMG to the GitHub release, and writes `appcast.xml` onto that same release. The feed item points at the zip. Older appcast items are kept when a previous release already has `appcast.xml`. The app’s feed URL is `https://github.com/<owner>/<repo>/releases/latest/download/appcast.xml` for the repository that ran the workflow.
 
-Signing and notarization are optional. With none of the secrets below, the workflow ad-hoc signs the app (`codesign` identity `-`, hardened runtime) and still uploads the zip, DMG, and appcast. An appcast built without `SPARKLE_PRIVATE_KEY` has no EdDSA signature. Sparkle will reject that feed until you add the key and publish again.
+The same job uploads source archives of the tagged commit: `Disk-Arbitrator-<version>-source.zip` and `Disk-Arbitrator-<version>-source.tar.gz`. `git archive` writes the source tree, including `LICENSE`, under a top-level folder named `Disk Arbitrator <version>`. GitHub still adds its own Source code (zip and tar.gz) links for the tag. It also uploads `README.md` (from `README.markdown`) and `ReleaseNotes.md` (from `ReleaseNotes.markdown`) as their own assets. The DMG includes `LICENSE`, `README.md`, and `ReleaseNotes.md` beside the app, in addition to any `README.html` and `ReleaseNotes.html` copied from the app bundle. The app zip is the application only.
+
+Signing and notarization are optional. With none of the secrets below, the workflow ad-hoc signs the app (`codesign` identity `-`, hardened runtime) and still uploads the zip, DMG, source archives, README, changelog, and appcast. An appcast built without `SPARKLE_PRIVATE_KEY` has no EdDSA signature. Sparkle will reject that feed until you add the key and publish again.
 
 Set the public key as an Actions variable (it is not a secret):
 
