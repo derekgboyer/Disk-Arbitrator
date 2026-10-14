@@ -107,13 +107,13 @@ Export the private key for GitHub Actions:
 security find-generic-password -a ed25519 -s "https://sparkle-project.org" -w
 ```
 
-Store that output as the `SPARKLE_PRIVATE_KEY` secret. `./bin/generate_keys -h` lists the current export flags if you prefer the tool’s own export over the keychain command. The public key inside the app and the private key that signs `appcast.xml` have to be the pair from the same `generate_keys` run. Sparkle compares `CFBundleVersion` (the Xcode build number), which is 11 for version 0.10.1 and must increase for the next release. Version 0.10.1 is ready to tag as `v0.10.1`.
+Store that output as the `SPARKLE_PRIVATE_KEY` secret. `./bin/generate_keys -h` lists the current export flags if you prefer the tool’s own export over the keychain command. The public key inside the app and the private key that signs `appcast.xml` have to be the pair from the same `generate_keys` run. Sparkle compares `CFBundleVersion` (the Xcode build number), which is 12 for version 0.10.2 and must increase for the next release. Version 0.10.2 (build 12) is ready to tag as `v0.10.2`.
 
 ## Releasing
 
 Pull requests and branch pushes run `.github/workflows/build.yml`, which builds the universal Release app.
 
-Pushing a tag named `v*` (for example `v0.10`) runs `.github/workflows/release.yml` on a macOS runner. It builds the universal Release app, uploads a zip and a DMG to the GitHub release, and writes `appcast.xml` onto that same release. The feed item points at the zip. Older appcast items are kept when a previous release already has `appcast.xml`. The app’s feed URL is `https://github.com/<owner>/<repo>/releases/latest/download/appcast.xml` for the repository that ran the workflow.
+Pushing a tag named `v*` (for example `v0.10.2`) runs `.github/workflows/release.yml` on a macOS runner. It builds the universal Release app, uploads a zip and a DMG to the GitHub release, and writes `appcast.xml` onto that same release. The feed contains only that release. Its enclosure is the app zip (`Disk.Arbitrator-<version>.zip`). Source archives and older compiled zips are not update items. The app’s feed URL is `https://github.com/<owner>/<repo>/releases/latest/download/appcast.xml` for the repository that ran the workflow.
 
 The same job uploads source archives of the tagged commit: `Disk-Arbitrator-<version>-source.zip` and `Disk-Arbitrator-<version>-source.tar.gz`. `git archive` writes the source tree, including `LICENSE`, under a top-level folder named `Disk Arbitrator <version>`. GitHub still adds its own Source code (zip and tar.gz) links for the tag. It also uploads `README.md` (from `README.markdown`) and `ReleaseNotes.md` (from `ReleaseNotes.markdown`) as their own assets. The DMG includes `LICENSE`, `README.md`, and `ReleaseNotes.md` beside the app, in addition to any `README.html` and `ReleaseNotes.html` copied from the app bundle. The app zip is the application only.
 

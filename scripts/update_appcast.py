@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Insert one Sparkle release into an appcast, keeping older items."""
+"""Write a Sparkle appcast that contains only the release being published."""
 
 import argparse
 import email.utils
@@ -13,6 +13,8 @@ DC = "http://purl.org/dc/elements/1.1/"
 ET.register_namespace("sparkle", SPARKLE)
 ET.register_namespace("dc", DC)
 
+APP_ZIP_PREFIX = "Disk.Arbitrator-"
+
 
 def sparkle(name):
     return f"{{{SPARKLE}}}{name}"
@@ -21,6 +23,27 @@ def sparkle(name):
 def item_version(item):
     node = item.find(sparkle("version"))
     return (node.text or "").strip() if node is not None else ""
+
+
+def enclosure_url(item):
+    enclosure = item.find("enclosure")
+    if enclosure is None:
+        return ""
+    return enclosure.get("url") or ""
+
+
+def basename_of(url):
+    path = url.split("?", 1)[0].split("#", 1)[0]
+    return path.rsplit("/", 1)[-1]
+
+
+def is_source_archive(name):
+    lower = name.lower()
+    return "-source." in lower or lower.endswith((".tar.gz", ".tgz"))
+
+
+def is_app_zip(name):
+    return name.startswith(APP_ZIP_PREFIX) and name.endswith(".zip") and not is_source_archive(name)
 
 
 def new_tree(link):
@@ -44,7 +67,16 @@ def load(path):
     return ET.parse(path)
 
 
+def require_app_zip(name):
+    if is_source_archive(name) or not is_app_zip(name):
+        raise SystemExit(
+            f"refusing {name or '(missing enclosure)'} as the Sparkle update archive; "
+            f"expected {APP_ZIP_PREFIX}<version>.zip"
+        )
+
+
 def make_item(args):
+    require_app_zip(basename_of(args.url))
     item = ET.Element("item")
     ET.SubElement(item, "title").text = args.title or f"Version {args.short_version}"
     published = datetime.now(timezone.utc)
@@ -63,19 +95,20 @@ def make_item(args):
     return item
 
 
-def preserve(channel, previous_path):
-    if not previous_path:
-        return
-    path = Path(previous_path)
-    if not path.is_file():
-        return
-    previous = channel_of(load(path))
-    present = {item_version(item) for item in channel.findall("item")}
-    for item in previous.findall("item"):
-        version = item_version(item)
-        if version and version not in present:
-            channel.append(item)
-            present.add(version)
+def keep_only(channel, version):
+    kept = []
+    for item in list(channel.findall("item")):
+        name = basename_of(enclosure_url(item))
+        if item_version(item) != version or not is_app_zip(name):
+            channel.remove(item)
+            if item_version(item) == version:
+                require_app_zip(name)
+            continue
+        kept.append(item)
+    if len(kept) != 1:
+        raise SystemExit(
+            f"appcast must contain exactly one item for build {version}; found {len(kept)}"
+        )
 
 
 def write(tree, path):
@@ -86,7 +119,6 @@ def write(tree, path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--appcast", required=True)
-    parser.add_argument("--preserve-from", default="")
     parser.add_argument("--version", default="")
     parser.add_argument("--short-version", default="")
     parser.add_argument("--url", default="")
@@ -97,17 +129,20 @@ def main():
     parser.add_argument("--link", default="", help="Channel link for a newly created appcast. The release workflow passes https://github.com/<owner>/<repo>.")
     args = parser.parse_args()
 
+    if not args.version:
+        raise SystemExit("--version is required so the appcast contains only that build")
+
     destination = Path(args.appcast)
     tree = load(destination) if destination.is_file() else new_tree(args.link)
     channel = channel_of(tree)
 
-    if args.version:
+    writing_item = bool(args.url or args.short_version or args.length or args.ed_signature)
+    if writing_item:
         if not args.short_version or not args.url or not args.length:
-            raise SystemExit("--version requires --short-version, --url, and --length")
+            raise SystemExit("--version requires --short-version, --url, and --length when writing an item")
         for item in list(channel.findall("item")):
             if item_version(item) == args.version:
                 channel.remove(item)
-        # Newest release stays first.
         insert_at = None
         for index, child in enumerate(list(channel)):
             if child.tag == "item":
@@ -119,7 +154,7 @@ def main():
         else:
             channel.insert(insert_at, item)
 
-    preserve(channel, args.preserve_from)
+    keep_only(channel, args.version)
     destination.parent.mkdir(parents=True, exist_ok=True)
     write(tree, destination)
 
