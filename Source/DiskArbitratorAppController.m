@@ -224,6 +224,14 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 		return !self.arbitrator.isActivated;
 	if (menuItem.action == @selector(performDeactivation:))
 		return self.arbitrator.isActivated;
+	if (menuItem.action == @selector(performSetMountBlockMode:) || menuItem.action == @selector(performSetMountReadOnlyMode:))
+		return self.arbitrator.isActivated;
+	if (menuItem.action == @selector(performEject:))
+		return self.canEjectSelectedDisk;
+	if (menuItem.action == @selector(performMount:))
+		return self.canMountSelectedDisk;
+	if (menuItem.action == @selector(performUnmount:))
+		return self.canUnmountSelectedDisk;
 	return YES;
 }
 
