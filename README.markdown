@@ -34,7 +34,7 @@ These are limits of Disk Arbitration and SIP, not optional features that were re
 * The first system mount request is rejected, and only a mount Disk Arbitrator itself just submitted is approved. That closes a gap where a second system attempt could be allowed read-write before the read-only remount started.
 * APFS containers show up as one whole disk plus a volume per container entry. Snapshot and synthesized disks that have no BSD name are ignored so they cannot crash the callback.
 * Disk icons come from Finder (`NSWorkspace`). The old kext-bundle lookup does not work when the media driver lives only in the kernel collection, which is the usual case on Apple silicon.
-* Menu-bar icons are the original artwork (about 20×24 pixels). They are functional on a Retina display and are not redrawn at 2x.
+* The menu-bar icon, toolbar, and disk list use SF Symbols and system colors, so they follow light mode, dark mode, and the accent color. The app icon is the same aluminum disk and colored square as before, redrawn for the current macOS icon shape.
 * Encrypted disk images ask for a password in the app. The old Authorization Services prompt stopped returning the password the user typed. Software license agreements are still answered "Yes" automatically.
 * Time Machine and other automatic mounts are blocked while Disk Arbitrator is activated. That is the same behavior as before.
 

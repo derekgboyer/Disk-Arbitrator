@@ -16,6 +16,7 @@
 #import "AttachDiskImageController.h"
 #import "AuditLog.h"
 #import "TrustedDiskStore.h"
+#import "SettingsWindowController.h"
 #import <ServiceManagement/ServiceManagement.h>
 #import <Sparkle/Sparkle.h>
 #include <unistd.h>
@@ -57,26 +58,78 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 		[arbitrator deactivate];
 }
 
-- (void)setStatusItemIconWithName:(NSString *)name
+- (NSImage *)statusSymbolNamed:(NSString *)name color:(NSColor *)color accessibility:(NSString *)accessibility
 {
-	NSString *iconPath = [[NSBundle mainBundle] pathForResource:name ofType:@"png"];
-	NSImage *statusIcon = [[NSImage alloc] initWithContentsOfFile:iconPath];
-	statusItem.button.image = statusIcon;
+	NSImage *image = [NSImage imageWithSystemSymbolName:name accessibilityDescription:accessibility];
+	if (!image)
+		return nil;
+	NSImageSymbolConfiguration *size = [NSImageSymbolConfiguration configurationWithPointSize:15 weight:NSFontWeightSemibold];
+	NSImageSymbolConfiguration *palette = [NSImageSymbolConfiguration configurationWithPaletteColors:@[color]];
+	image = [image imageWithSymbolConfiguration:[size configurationByApplyingConfiguration:palette]];
+	image.template = NO;
+	return image;
+}
+
+- (void)refreshWindowSubtitle
+{
+	if (!self.window)
+		return;
+	if (self.arbitrator.isActivated == NO)
+		self.window.subtitle = NSLocalizedString(@"Not intercepting mounts", nil);
+	else if (self.arbitrator.mountMode == MM_READONLY)
+		self.window.subtitle = NSLocalizedString(@"New mounts are read-only, except trusted disks", nil);
+	else
+		self.window.subtitle = NSLocalizedString(@"Blocking new mounts, except trusted disks", nil);
+}
+
+- (void)applyModernWindowChrome
+{
+	self.window.styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+	self.window.toolbarStyle = NSWindowToolbarStyleUnified;
+	self.window.title = NSLocalizedString(@"Disks", nil);
+	self.window.minSize = NSMakeSize(560, 420);
+	self.tableView.style = NSTableViewStyleInset;
+	self.tableView.rowHeight = 52;
+	self.tableView.intercellSpacing = NSMakeSize(4, 4);
+	self.tableView.gridStyleMask = NSTableViewGridNone;
+	self.tableView.selectionHighlightStyle = NSTableViewSelectionHighlightStyleRegular;
+	NSScrollView *scroll = self.tableView.enclosingScrollView;
+	scroll.borderType = NSNoBorder;
+	scroll.drawsBackground = NO;
+	self.tableView.backgroundColor = [NSColor clearColor];
+	if (self.tableView.tableColumns.count > 0)
+		self.tableView.tableColumns[0].headerCell.stringValue = NSLocalizedString(@"Disk", nil);
+	if (self.tableView.tableColumns.count > 1)
+		self.tableView.tableColumns[1].headerCell.stringValue = NSLocalizedString(@"BSD Name", nil);
+	[self refreshWindowSubtitle];
 }
 
 - (void)refreshStatusItemIcon
 {
-	if (arbitrator.isActivated == NO)
-		[self setStatusItemIconWithName:@"StatusItem Disabled 1"];
-	
-	else if (arbitrator.mountMode == MM_BLOCK)
-		[self setStatusItemIconWithName:@"StatusItem Green"];
+	NSString *symbol = @"shield";
+	NSColor *color = [NSColor secondaryLabelColor];
+	NSString *accessibility = NSLocalizedString(@"Disk Arbitrator is off", nil);
 
-	else if (arbitrator.mountMode == MM_READONLY)
-		[self setStatusItemIconWithName:@"StatusItem Orange"];
-	
-	else
+	if (arbitrator.isActivated && arbitrator.mountMode == MM_READONLY) {
+		symbol = @"lock.fill";
+		color = [NSColor systemOrangeColor];
+		accessibility = NSLocalizedString(@"Read-only mode", nil);
+	}
+	else if (arbitrator.isActivated && arbitrator.mountMode == MM_BLOCK) {
+		symbol = @"shield.fill";
+		color = [NSColor systemGreenColor];
+		accessibility = NSLocalizedString(@"Blocking mounts", nil);
+	}
+	else if (arbitrator.isActivated) {
 		NSAssert1(NO, @"Invalid mount mode: %ld\n", (long)arbitrator.mountMode);
+	}
+
+	NSImage *image = [self statusSymbolNamed:symbol color:color accessibility:accessibility];
+	statusItem.button.image = image;
+	NSImage *alternate = [image copy];
+	alternate.template = YES;
+	statusItem.button.alternateImage = alternate;
+	[self refreshWindowSubtitle];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
@@ -106,7 +159,6 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	NSButtonCell *statusButtonCell = (NSButtonCell *)self.statusItem.button.cell;
 	if ([statusButtonCell isKindOfClass:[NSButtonCell class]])
 		statusButtonCell.highlightsBy = NSNoCellMask;
-	[self setStatusItemIconWithName:@"StatusItem Disabled 1"];
 	statusItem.menu = statusMenu;
 
 	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Full Disk Access…", nil) action:@selector(showFullDiskAccessHelp:)];
@@ -125,6 +177,7 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	self.arbitrator = [Arbitrator new];
 	[arbitrator addObserver:self forKeyPath:@"isActivated" options:0 context:NULL];
 	[arbitrator addObserver:self forKeyPath:@"mountMode" options:0 context:NULL];
+	[self applyModernWindowChrome];
 	[self refreshStatusItemIcon];  // arbitrator status initial state is taken from user defaults, which was initialized before KVO initialized
 
 	Log(LOG_INFO, @"Disk Arbitrator %@ running. activated=%d mode=%ld",
@@ -134,6 +187,7 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	self.sortDescriptors = [NSArray arrayWithObject:[[NSSortDescriptor alloc] initWithKey:@"BSDNameNumber" ascending:YES]];
 	
 	SetupToolbar(window, self);
+	[self applyModernWindowChrome];
 	window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces;
 	window.worksWhenModal = YES;
 	
@@ -154,8 +208,10 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
 {
 	if (object == arbitrator)
-		if ([keyPath isEqual:@"isActivated"] || [keyPath isEqual:@"mountMode"])
+		if ([keyPath isEqual:@"isActivated"] || [keyPath isEqual:@"mountMode"]) {
 			[self refreshStatusItemIcon];
+			[self.tableView reloadData];
+		}
 }
 
 - (IBAction)showAboutPanel:(id)sender
@@ -280,12 +336,7 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 
 - (IBAction)showPreferences:(id)sender
 {
-	static NSWindowController *controller = nil;
-
-	if (!controller)
-		controller = [[NSWindowController alloc] initWithWindowNibName:@"Preferences"];
-
-	[controller.window makeKeyAndOrderFront:self];
+	[[SettingsWindowController sharedController] showWindow:sender];
 	ActivateDiskArbitratorApp();
 }
 

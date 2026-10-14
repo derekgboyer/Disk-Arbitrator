@@ -59,6 +59,7 @@
 		F59400091PRIVACY /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F59400081PRIVACY /* PrivacyInfo.xcprivacy */; };
 		F594A1030000000000000003 /* AuditLog.m in Sources */ = {isa = PBXBuildFile; fileRef = F594A1020000000000000002 /* AuditLog.m */; };
 		F594B1030000000000000003 /* TrustedDiskStore.m in Sources */ = {isa = PBXBuildFile; fileRef = F594B1020000000000000002 /* TrustedDiskStore.m */; };
+		F594C1030000000000000003 /* SettingsWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = F594C1020000000000000002 /* SettingsWindowController.m */; };
 		F594D1030000000000000003 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F594D1020000000000000002 /* Sparkle */; };
 /* End PBXBuildFile section */
 
@@ -137,6 +138,8 @@
 		F594A1020000000000000002 /* AuditLog.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AuditLog.m; sourceTree = "<group>"; };
 		F594B1010000000000000001 /* TrustedDiskStore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TrustedDiskStore.h; sourceTree = "<group>"; };
 		F594B1020000000000000002 /* TrustedDiskStore.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TrustedDiskStore.m; sourceTree = "<group>"; };
+		F594C1010000000000000001 /* SettingsWindowController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SettingsWindowController.h; sourceTree = "<group>"; };
+		F594C1020000000000000002 /* SettingsWindowController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SettingsWindowController.m; sourceTree = "<group>"; };
 		A5E4FC5A1CC99C64005B7675 /* ReleaseNotes.markdown */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = ReleaseNotes.markdown; sourceTree = "<group>"; };
 		E48EB2D323EE60EC00C0B297 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
 		E48EB2D423EE60EC00C0B297 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MountOptions.xib; sourceTree = "<group>"; };
@@ -187,6 +190,8 @@
 				F594A1020000000000000002 /* AuditLog.m */,
 				F594B1010000000000000001 /* TrustedDiskStore.h */,
 				F594B1020000000000000002 /* TrustedDiskStore.m */,
+				F594C1010000000000000001 /* SettingsWindowController.h */,
+				F594C1020000000000000002 /* SettingsWindowController.m */,
 			);
 			name = Classes;
 			path = Source;
@@ -422,6 +427,7 @@
 				9626E83211314E7600B803AB /* AttachDiskImageController.m in Sources */,
 				F594A1030000000000000003 /* AuditLog.m in Sources */,
 				F594B1030000000000000003 /* TrustedDiskStore.m in Sources */,
+				F594C1030000000000000003 /* SettingsWindowController.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

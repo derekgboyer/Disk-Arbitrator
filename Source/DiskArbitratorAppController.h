@@ -27,6 +27,10 @@
 - (IBAction)showAboutPanel:(id)sender;
 - (IBAction)showMainWindow:(id)sender;
 - (IBAction)showPreferences:(id)sender;
+- (IBAction)showAuditLog:(id)sender;
+- (IBAction)showTrustedDisks:(id)sender;
+- (IBAction)checkForUpdates:(id)sender;
+- (IBAction)trustSelectedDisk:(id)sender;
 - (IBAction)performActivation:(id)sender;
 - (IBAction)performDeactivation:(id)sender;
 - (IBAction)toggleActivation:(id)sender;
