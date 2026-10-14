@@ -22,6 +22,7 @@ NSString * const DAAuditEventUnmounted = @"unmounted";
 NSString * const DAAuditEventEjected = @"ejected";
 NSString * const DAAuditEventError = @"error";
 NSString * const DAAuditEventRuleMatched = @"rule_matched";
+NSString * const DAAuditEventModeChanged = @"mode_changed";
 
 static NSArray<NSString *> *DAAuditFieldOrder(void)
 {
@@ -29,7 +30,7 @@ static NSArray<NSString *> *DAAuditFieldOrder(void)
 	static dispatch_once_t once;
 	dispatch_once(&once, ^{
 		order = @[
-			@"timestamp", @"event", @"action", @"message",
+			@"timestamp", @"event", @"action", @"message", @"user",
 			@"bsdName", @"volumeName", @"volumeUUID", @"mediaUUID",
 			@"fileSystem", @"mediaName", @"deviceModel", @"deviceProtocol", @"mediaSize"
 		];
@@ -105,6 +106,7 @@ static NSString *DACSVEscape(id value)
 @property (copy, readwrite) NSURL *logFileURL;
 @property (strong) NSLock *writeLock;
 @property (strong) NSISO8601DateFormatter *timestampFormatter;
+- (void)recordEvent:(NSString *)event disk:(Disk *)disk action:(NSString *)action message:(NSString *)message user:(NSString *)user;
 @end
 
 @implementation AuditLog
@@ -161,11 +163,25 @@ static NSString *DACSVEscape(id value)
 
 - (void)recordEvent:(NSString *)event disk:(Disk *)disk action:(NSString *)action message:(NSString *)message
 {
+	[self recordEvent:event disk:disk action:action message:message user:nil];
+}
+
+- (void)recordModeChange:(NSString *)state
+{
+	NSString *user = NSUserName();
+	NSString *mode = state.length ? state : @"mode changed";
+	[self recordEvent:DAAuditEventModeChanged disk:nil action:mode message:mode user:(user.length ? user : @"unavailable")];
+}
+
+- (void)recordEvent:(NSString *)event disk:(Disk *)disk action:(NSString *)action message:(NSString *)message user:(NSString *)user
+{
 	NSMutableDictionary *record = [NSMutableDictionary dictionary];
 	record[@"timestamp"] = [self.timestampFormatter stringFromDate:[NSDate date]] ?: @"";
 	record[@"event"] = event.length ? event : @"unknown";
 	record[@"action"] = action ?: [NSNull null];
 	record[@"message"] = message ?: [NSNull null];
+	if (user.length)
+		record[@"user"] = user;
 	[record addEntriesFromDictionary:[self fieldsForDisk:disk]];
 
 	NSError *error = nil;

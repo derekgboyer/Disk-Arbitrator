@@ -17,6 +17,7 @@ extern NSString * const DAAuditEventUnmounted;
 extern NSString * const DAAuditEventEjected;
 extern NSString * const DAAuditEventError;
 extern NSString * const DAAuditEventRuleMatched;
+extern NSString * const DAAuditEventModeChanged;
 
 /* Stable string for a Disk Arbitration description value (string, UUID, or number). */
 NSString *DAStringFromDescriptionValue(id value);
@@ -30,6 +31,12 @@ NSString *DAMediaUUIDForDisk(Disk *disk);
 @property (readonly, copy) NSURL *logFileURL;
 
 - (void)recordEvent:(NSString *)event disk:(Disk *)disk action:(NSString *)action message:(NSString *)message;
+
+/* Blocking, read-only, and activation changes. The line is timestamped like every other event.
+ * The macOS user name (NSUserName()) is stored on the entry. state is the new mode, for example
+ * "blocking on", "read-only off", "activated", or "deactivated".
+ */
+- (void)recordModeChange:(NSString *)state;
 
 /* Newest first. limit 0 reads the whole file. */
 - (NSArray<NSDictionary *> *)entriesWithLimit:(NSUInteger)limit;

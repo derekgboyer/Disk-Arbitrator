@@ -111,7 +111,7 @@ Store that output as the `SPARKLE_PRIVATE_KEY` secret. `./bin/generate_keys -h` 
 
 ## Releasing
 
-Pull requests and branch pushes run `.github/workflows/build.yml`, which builds the universal Release app.
+Pull requests and branch pushes run `.github/workflows/build.yml`, which builds the universal Release app. The build and release workflows use current Node 24 GitHub Actions, including `actions/checkout@v5`.
 
 Pushing a tag named `v*` (for example `v0.10.2`) runs `.github/workflows/release.yml` on a macOS runner. It builds the universal Release app, uploads a zip and a DMG to the GitHub release, and writes `appcast.xml` onto that same release. The feed contains only that release. Its enclosure is the app zip (`Disk.Arbitrator-<version>.zip`). Source archives and older compiled zips are not update items. The app’s feed URL is `https://github.com/<owner>/<repo>/releases/latest/download/appcast.xml` for the repository that ran the workflow.
 

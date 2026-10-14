@@ -6,6 +6,9 @@
 * The DMG includes `LICENSE`, README, and the release notes.
 * Source archives are attached to releases.
 * Build number is 12. Sparkle compares `CFBundleVersion`, so this build is newer than 0.10.1.
+* On launch, if the app is not running from `/Applications` (a disk image, another folder, or App Translocation), Disk Arbitrator warns and can copy itself to `/Applications/Disk Arbitrator.app`, then relaunch. The login item cannot keep finding a copy left outside Applications. Xcode debug launches are skipped.
+* Audit log entries for mode changes: blocking on or off, read-only on or off, and activated or deactivated. Each entry is timestamped and includes the macOS user name.
+* Copy Disk Details, in the Edit menu and the disk list context menu, copies the selected disk as plain text. The items are disabled when no disk is selected.
 
 #### 0.10.1 2026/10/14
 
