@@ -69,6 +69,7 @@ jobs:
             "ARCHS=arm64 x86_64"
             "CODE_SIGN_IDENTITY=${SIGN_ID}"
             CODE_SIGN_STYLE=Manual
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
             DEVELOPMENT_TEAM=""
             "SPARKLE_FEED_URL=${FEED_URL}"
           )
@@ -86,6 +87,57 @@ jobs:
           test -d "$APP"
           lipo -info "$BINARY" | grep -q arm64
           lipo -info "$BINARY" | grep -q x86_64
+          if [ "${{ steps.sign.outputs.mode }}" = "developer-id" ]; then
+            # Sign inside-out. codesign --deep is not used; it would resign Sparkle
+            # with one set of entitlements and notarization would come back Invalid.
+            IDENTITY="$SIGN_ID"
+            ENTITLEMENTS="${GITHUB_WORKSPACE}/Resources/DiskArbitrator.entitlements"
+            test -f "$ENTITLEMENTS"
+            FRAMEWORK="${APP}/Contents/Frameworks/Sparkle.framework"
+            SPARKLE_PATHS=(
+              "${FRAMEWORK}/Versions/B/Autoupdate"
+              "${FRAMEWORK}/Versions/B/Updater.app"
+              "${FRAMEWORK}/Versions/B/XPCServices/Installer.xpc"
+              "${FRAMEWORK}/Versions/B/XPCServices/Downloader.xpc"
+              "${FRAMEWORK}/Versions/B/Sparkle"
+              "${FRAMEWORK}"
+            )
+            LAUNCH_AGENT="${APP}/Contents/Library/LaunchAgents/us.burghardt.Disk-Arbitrator.plist"
+            for required in "${SPARKLE_PATHS[@]}" "$LAUNCH_AGENT" "$BINARY"; do
+              if [ ! -e "$required" ]; then
+                echo "Required signing path is missing: ${required}" >&2
+                exit 1
+              fi
+            done
+            sign_sparkle() {
+              echo "Signing ${1}"
+              codesign --force --sign "$IDENTITY" --preserve-metadata=entitlements --options runtime --timestamp "$1"
+            }
+            sign_sparkle "${FRAMEWORK}/Versions/B/Autoupdate"
+            sign_sparkle "${FRAMEWORK}/Versions/B/Updater.app"
+            sign_sparkle "${FRAMEWORK}/Versions/B/XPCServices/Installer.xpc"
+            sign_sparkle "${FRAMEWORK}/Versions/B/XPCServices/Downloader.xpc"
+            sign_sparkle "${FRAMEWORK}"
+            echo "Signing ${LAUNCH_AGENT}"
+            codesign --force --sign "$IDENTITY" --timestamp "$LAUNCH_AGENT"
+            echo "Signing ${BINARY}"
+            codesign --force --sign "$IDENTITY" --options runtime --timestamp --entitlements "$ENTITLEMENTS" "$BINARY"
+            echo "Signing ${APP}"
+            codesign --force --sign "$IDENTITY" --options runtime --timestamp --entitlements "$ENTITLEMENTS" "$APP"
+            set +e
+            ENT_DUMP=$(codesign -d --entitlements :- "$BINARY" 2>&1)
+            ent_status=$?
+            set -e
+            printf '%s\n' "$ENT_DUMP"
+            if [ "$ent_status" -ne 0 ] && ! printf '%s\n' "$ENT_DUMP" | grep -q "no entitlements"; then
+              echo "Could not read entitlements for ${BINARY}." >&2
+              exit 1
+            fi
+            if printf '%s\n' "$ENT_DUMP" | grep -q "com.apple.security.get-task-allow"; then
+              echo "The app executable still requests com.apple.security.get-task-allow." >&2
+              exit 1
+            fi
+          fi
           codesign --verify --deep --strict --verbose=2 "$APP"
           codesign -d --verbose=2 "$APP" 2>&1 | grep -q runtime
 
@@ -113,12 +165,32 @@ jobs:
           mkdir -p "$KEY_DIR"
           printf '%s\n' "$APPLE_API_KEY" > "$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8"
           chmod 600 "$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8"
+          NOTARY_JSON="${RUNNER_TEMP}/notary-app.json"
+          set +e
           xcrun notarytool submit "$ZIP" \
             --key "$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8" \
             --key-id "$APPLE_API_KEY_ID" \
             --issuer "$APPLE_API_ISSUER_ID" \
-            --wait
+            --wait \
+            --output-format json > "$NOTARY_JSON"
+          submit_status=$?
+          set -e
+          cat "$NOTARY_JSON"
+          STATUS=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status",""))' "$NOTARY_JSON")
+          SUBMISSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("id",""))' "$NOTARY_JSON")
+          echo "App notarization status=${STATUS} id=${SUBMISSION} submit_exit=${submit_status}"
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "Notarization was not Accepted. Not stapling." >&2
+            if [ -n "$SUBMISSION" ]; then
+              xcrun notarytool log "$SUBMISSION" \
+                --key "$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8" \
+                --key-id "$APPLE_API_KEY_ID" \
+                --issuer "$APPLE_API_ISSUER_ID"
+            fi
+            exit 1
+          fi
           xcrun stapler staple "$APP"
+          spctl --assess --type execute --verbose=4 "$APP"
           echo "stapled=true" >> "$GITHUB_OUTPUT"
 
       - name: Package zip and DMG
@@ -164,11 +236,30 @@ jobs:
             codesign --force --sign "${{ steps.sign.outputs.identity }}" --timestamp "$DMG"
             if [ "${{ steps.notarize.outputs.stapled }}" = "true" ]; then
               KEY_DIR="$RUNNER_TEMP/private_keys"
+              NOTARY_JSON="${RUNNER_TEMP}/notary-dmg.json"
+              set +e
               xcrun notarytool submit "$DMG" \
                 --key "$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8" \
                 --key-id "$APPLE_API_KEY_ID" \
                 --issuer "$APPLE_API_ISSUER_ID" \
-                --wait
+                --wait \
+                --output-format json > "$NOTARY_JSON"
+              submit_status=$?
+              set -e
+              cat "$NOTARY_JSON"
+              STATUS=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status",""))' "$NOTARY_JSON")
+              SUBMISSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("id",""))' "$NOTARY_JSON")
+              echo "DMG notarization status=${STATUS} id=${SUBMISSION} submit_exit=${submit_status}"
+              if [ "$STATUS" != "Accepted" ]; then
+                echo "DMG notarization was not Accepted. Not stapling." >&2
+                if [ -n "$SUBMISSION" ]; then
+                  xcrun notarytool log "$SUBMISSION" \
+                    --key "$KEY_DIR/AuthKey_${APPLE_API_KEY_ID}.p8" \
+                    --key-id "$APPLE_API_KEY_ID" \
+                    --issuer "$APPLE_API_ISSUER_ID"
+                fi
+                exit 1
+              fi
               xcrun stapler staple "$DMG"
             fi
           fi

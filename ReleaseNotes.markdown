@@ -3,6 +3,7 @@
 #### 0.10.2 2026/10/14
 
 * Developer ID signed and notarized build, so it opens normally on macOS 27.
+* Release signing does not inject `com.apple.security.get-task-allow`. Notarization rejects that entitlement.
 * The DMG includes `LICENSE`, README, and the release notes.
 * Source archives are attached to releases.
 * Build number is 12. Sparkle compares `CFBundleVersion`, so this build is newer than 0.10.1.
