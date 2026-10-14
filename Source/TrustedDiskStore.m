@@ -207,7 +207,7 @@ static NSString * const TrustedDiskKindMedia = @"media";
 		return existing;
 	}
 
-	TrustedDiskRule *rule = [[[TrustedDiskRule alloc] init] autorelease];
+	TrustedDiskRule *rule = [TrustedDiskRule new];
 	rule.identifier = identifier.uppercaseString;
 	rule.kind = kind;
 	rule.displayName = [self displayNameForDisk:disk];
@@ -215,9 +215,9 @@ static NSString * const TrustedDiskKindMedia = @"media";
 	rule.fileSystem = DAStringFromDescriptionValue(disk.diskDescription[(NSString *)kDADiskDescriptionVolumeKindKey]) ?: @"";
 	rule.addedAt = [self.timestampFormatter stringFromDate:[NSDate date]] ?: @"";
 
-	NSMutableArray *updated = [[self.rules mutableCopy] autorelease];
+	NSMutableArray *updated = [self.rules mutableCopy];
 	[updated addObject:rule];
-	NSArray *previous = [[self.rules copy] autorelease];
+	NSArray *previous = self.rules;
 	self.rules = updated;
 	NSError *saveError = nil;
 	BOOL saved = [self saveRules:&saveError];
@@ -239,9 +239,9 @@ static NSString * const TrustedDiskKindMedia = @"media";
 	if (indexes.count == 0)
 		return YES;
 	[self.lock lock];
-	NSMutableArray *updated = [[self.rules mutableCopy] autorelease];
+	NSMutableArray *updated = [self.rules mutableCopy];
 	[updated removeObjectsAtIndexes:indexes];
-	NSArray *previous = [[self.rules copy] autorelease];
+	NSArray *previous = self.rules;
 	self.rules = updated;
 	NSError *saveError = nil;
 	BOOL saved = [self saveRules:&saveError];
