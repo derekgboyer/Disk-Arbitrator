@@ -1,5 +1,12 @@
 ## Release Notes
 
+#### 0.10.1 2026/10/14
+
+* The menu bar icon is the original Disk Arbitrator hard-disk platter, spindle, and actuator arm again. It is redrawn as a crisp vector at menu-bar size, instead of the generic SF Symbols (`shield`, `shield.fill`, `lock.fill`).
+* Off is a template image, so it is correct on light and dark menu bars.
+* Block mounts stays the original green platter. Read-only stays the original orange platter. Both have a dark-menu-bar variant with a light arm and stroke.
+* Build number is 11. Sparkle compares `CFBundleVersion`. Version 0.10 was already tagged; this release is ready to tag as `v0.10.1`.
+
 #### 0.10 2026/10/14
 
 * Audit log. Disk appear, disappear, block, read-only mount, read-write mount, unmount, eject, error, and trusted-rule events are appended as JSON Lines to `~/Library/Logs/Disk Arbitrator/audit.jsonl`. Timestamps are UTC. Mount and unmount lines follow the volume path, including mounts macOS performs for a trusted disk and unmounts started outside the app. A disk that is already mounted at launch is `appeared` only. Audit Log… shows the recent entries and can export the whole file as CSV or JSON.

@@ -61,6 +61,7 @@
 		F594B1030000000000000003 /* TrustedDiskStore.m in Sources */ = {isa = PBXBuildFile; fileRef = F594B1020000000000000002 /* TrustedDiskStore.m */; };
 		F594C1030000000000000003 /* SettingsWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = F594C1020000000000000002 /* SettingsWindowController.m */; };
 		F594D1030000000000000003 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F594D1020000000000000002 /* Sparkle */; };
+		F594E2020000000000000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F594E2010000000000000001 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXBuildRule section */
@@ -134,6 +135,7 @@
 		F59400041UTIFW /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
 		F59400061SMFW /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ServiceManagement.framework; path = System/Library/Frameworks/ServiceManagement.framework; sourceTree = SDKROOT; };
 		F59400081PRIVACY /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F594E2010000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
 		F594A1010000000000000001 /* AuditLog.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AuditLog.h; sourceTree = "<group>"; };
 		F594A1020000000000000002 /* AuditLog.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AuditLog.m; sourceTree = "<group>"; };
 		F594B1010000000000000001 /* TrustedDiskStore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TrustedDiskStore.h; sourceTree = "<group>"; };
@@ -251,6 +253,7 @@
 				A532F1F31B93C4A0007DC4FD /* Nibs */,
 				8D1107310486CEB800E47090 /* DiskArbitrator-Info.plist */,
 				F59400081PRIVACY /* PrivacyInfo.xcprivacy */,
+				F594E2010000000000000001 /* Assets.xcassets */,
 				F59400011LAUNCHAGENT /* us.burghardt.Disk-Arbitrator.plist */,
 				9654B742111DE2EF00E9B0C4 /* README.markdown */,
 				A5E4FC5A1CC99C64005B7675 /* ReleaseNotes.markdown */,
@@ -374,6 +377,7 @@
 				96033DD51210E1DB006F4F11 /* Preferences.xib in Resources */,
 				96647D82133F95CB00E3EF30 /* ToolbarItem Attach Disk Plug.png in Resources */,
 				F59400091PRIVACY /* PrivacyInfo.xcprivacy in Resources */,
+				F594E2020000000000000002 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -523,7 +527,7 @@
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -538,7 +542,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.10;
+				MARKETING_VERSION = 0.10.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "us.burghardt.Disk-Arbitrator";
 				PRODUCT_NAME = "Disk Arbitrator";
 				PROVISIONING_PROFILE = "";
@@ -556,7 +560,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_APP_SANDBOX = NO;
@@ -570,7 +574,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.10;
+				MARKETING_VERSION = 0.10.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "us.burghardt.Disk-Arbitrator";
 				PRODUCT_NAME = "Disk Arbitrator";
 				PROVISIONING_PROFILE = "";

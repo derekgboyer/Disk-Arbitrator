@@ -58,15 +58,18 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 		[arbitrator deactivate];
 }
 
-- (NSImage *)statusSymbolNamed:(NSString *)name color:(NSColor *)color accessibility:(NSString *)accessibility
+// Platter, spindle, and actuator arm from the original status-item artwork.
+// Off is a template so the menu bar can draw it in light and dark. Block and
+// read-only keep the original green and orange platter colors, with a light
+// and dark stroke in the asset catalog. Do not copy these images: a copy
+// flattens the appearance variants.
+- (NSImage *)statusItemImageNamed:(NSString *)name accessibility:(NSString *)accessibility template:(BOOL)isTemplate
 {
-	NSImage *image = [NSImage imageWithSystemSymbolName:name accessibilityDescription:accessibility];
+	NSImage *image = [NSImage imageNamed:name];
 	if (!image)
 		return nil;
-	NSImageSymbolConfiguration *size = [NSImageSymbolConfiguration configurationWithPointSize:15 weight:NSFontWeightSemibold];
-	NSImageSymbolConfiguration *palette = [NSImageSymbolConfiguration configurationWithPaletteColors:@[color]];
-	image = [image imageWithSymbolConfiguration:[size configurationByApplyingConfiguration:palette]];
-	image.template = NO;
+	image.template = isTemplate;
+	image.accessibilityDescription = accessibility;
 	return image;
 }
 
@@ -106,28 +109,28 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 
 - (void)refreshStatusItemIcon
 {
-	NSString *symbol = @"shield";
-	NSColor *color = [NSColor secondaryLabelColor];
+	NSString *name = @"StatusItemOff";
+	BOOL isTemplate = YES;
 	NSString *accessibility = NSLocalizedString(@"Disk Arbitrator is off", nil);
 
 	if (arbitrator.isActivated && arbitrator.mountMode == MM_READONLY) {
-		symbol = @"lock.fill";
-		color = [NSColor systemOrangeColor];
+		name = @"StatusItemReadOnly";
+		isTemplate = NO;
 		accessibility = NSLocalizedString(@"Read-only mode", nil);
 	}
 	else if (arbitrator.isActivated && arbitrator.mountMode == MM_BLOCK) {
-		symbol = @"shield.fill";
-		color = [NSColor systemGreenColor];
+		name = @"StatusItemBlock";
+		isTemplate = NO;
 		accessibility = NSLocalizedString(@"Blocking mounts", nil);
 	}
 	else if (arbitrator.isActivated) {
 		NSAssert1(NO, @"Invalid mount mode: %ld\n", (long)arbitrator.mountMode);
 	}
 
-	NSImage *image = [self statusSymbolNamed:symbol color:color accessibility:accessibility];
+	NSImage *image = [self statusItemImageNamed:name accessibility:accessibility template:isTemplate];
 	statusItem.button.image = image;
-	NSImage *alternate = [image copy];
-	alternate.template = YES;
+	// The pressed image is the full-strength template, same as the original alternate icon.
+	NSImage *alternate = [self statusItemImageNamed:@"StatusItemTemplate" accessibility:accessibility template:YES];
 	statusItem.button.alternateImage = alternate;
 	[self refreshWindowSubtitle];
 }
@@ -153,9 +156,6 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 
 	NSStatusBar *bar = [NSStatusBar systemStatusBar];
 	self.statusItem = [bar statusItemWithLength:NSSquareStatusItemLength];
-    NSImage *altImage = [[NSImage imageNamed:@"StatusItem Disabled 1.png"] copy];
-    [altImage setTemplate:YES];
-    self.statusItem.button.alternateImage = altImage;
 	NSButtonCell *statusButtonCell = (NSButtonCell *)self.statusItem.button.cell;
 	if ([statusButtonCell isKindOfClass:[NSButtonCell class]])
 		statusButtonCell.highlightsBy = NSNoCellMask;
