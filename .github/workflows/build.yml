@@ -39,5 +39,7 @@ jobs:
           test -f "${APP}/Contents/Resources/PrivacyInfo.xcprivacy"
           plutil -lint "${APP}/Contents/Info.plist"
           plutil -lint "${APP}/Contents/Library/LaunchAgents/us.burghardt.Disk-Arbitrator.plist"
+          test -d "${APP}/Contents/Frameworks/Sparkle.framework"
+          plutil -extract SUFeedURL raw "${APP}/Contents/Info.plist" | grep -q "appcast.xml"
           # Hardened runtime is recorded as the runtime codesign flag (0x10000).
           codesign -d --verbose=2 "${APP}" 2>&1 | grep -q "runtime"

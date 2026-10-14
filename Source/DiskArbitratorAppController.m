@@ -17,6 +17,7 @@
 #import "AuditLog.h"
 #import "TrustedDiskStore.h"
 #import <ServiceManagement/ServiceManagement.h>
+#import <Sparkle/Sparkle.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -31,6 +32,8 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	NSMutableArray *diskInfoControllers;
 	id userActivity;
 }
+
+@property (strong) SPUStandardUpdaterController *updaterController;
 
 @end
 
@@ -84,6 +87,7 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	[defaults setObject:[NSNumber numberWithInt:LOG_INFO] forKey:AppLogLevelDefaultsKey];
 	[defaults setObject:[NSNumber numberWithBool:YES]     forKey:@"ShowMainWindowAtStartup"];
 	[defaults setObject:[NSNumber numberWithBool:NO]     forKey:@"ShowMainWindowAtActivate"];
+	[defaults setObject:[NSNumber numberWithBool:YES]    forKey:@"SUEnableAutomaticChecks"];
 	[[NSUserDefaults standardUserDefaults] registerDefaults:defaults];
 	
 	displayErrorQueue = [NSMutableArray new];
@@ -109,6 +113,7 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Audit Log…", nil) action:@selector(showAuditLog:)];
 	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Trusted Disks…", nil) action:@selector(showTrustedDisks:)];
 	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Trust Selected Disk", nil) action:@selector(trustSelectedDisk:)];
+	[self insertStatusMenuItemWithTitle:NSLocalizedString(@"Check for Updates…", nil) action:@selector(checkForUpdates:)];
 	
 	NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 	[center addObserver:self selector:@selector(diskDidChange:) name:DADiskDidChangeNotification object:nil];
@@ -136,6 +141,8 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 
 	if ([[NSUserDefaults standardUserDefaults] boolForKey:@"ShowMainWindowAtStartup"])
 		[window makeKeyAndOrderFront:self];
+
+	[self prepareUpdater];
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification
@@ -212,6 +219,11 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
 {
+	if (menuItem.action == @selector(checkForUpdates:)) {
+		if (!self.updaterController)
+			return YES;
+		return self.updaterController.updater.canCheckForUpdates;
+	}
 	if (menuItem.action == @selector(trustSelectedDisk:)) {
 		Disk *disk = self.selectedDisk;
 		BOOL identifiable = DAVolumeUUIDForDisk(disk).length > 0 || DAMediaUUIDForDisk(disk).length > 0;
@@ -233,6 +245,37 @@ static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
 	if (menuItem.action == @selector(performUnmount:))
 		return self.canUnmountSelectedDisk;
 	return YES;
+}
+
+- (BOOL)sparkleIsConfigured
+{
+	NSString *key = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"SUPublicEDKey"];
+	if (![key isKindOfClass:[NSString class]])
+		return NO;
+	NSString *trimmed = [key stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+	if (trimmed.length == 0 || [trimmed containsString:@"$("])
+		return NO;
+	return YES;
+}
+
+- (void)prepareUpdater
+{
+	if (!self.sparkleIsConfigured || self.updaterController)
+		return;
+	self.updaterController = [[SPUStandardUpdaterController alloc] initWithStartingUpdater:YES updaterDelegate:nil userDriverDelegate:nil];
+}
+
+- (IBAction)checkForUpdates:(id)sender
+{
+	if (!self.updaterController) {
+		NSAlert *alert = [[NSAlert alloc] init];
+		alert.messageText = NSLocalizedString(@"Updates are not configured", nil);
+		alert.informativeText = NSLocalizedString(@"Check for Updates needs Sparkle’s public key. On a Mac, run Sparkle’s generate_keys tool and put the printed public key in the SU_PUBLIC_ED_KEY build setting. Keep the private key out of the repository. A release build can receive the same public key from the SPARKLE_PUBLIC_ED_KEY secret.", nil);
+		[alert addButtonWithTitle:NSLocalizedString(@"OK", nil)];
+		[alert runModal];
+		return;
+	}
+	[self.updaterController checkForUpdates:sender];
 }
 
 - (IBAction)showPreferences:(id)sender

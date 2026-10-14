@@ -59,6 +59,7 @@
 		F59400091PRIVACY /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F59400081PRIVACY /* PrivacyInfo.xcprivacy */; };
 		F594A1030000000000000003 /* AuditLog.m in Sources */ = {isa = PBXBuildFile; fileRef = F594A1020000000000000002 /* AuditLog.m */; };
 		F594B1030000000000000003 /* TrustedDiskStore.m in Sources */ = {isa = PBXBuildFile; fileRef = F594B1020000000000000002 /* TrustedDiskStore.m */; };
+		F594D1030000000000000003 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F594D1020000000000000002 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXBuildRule section */
@@ -154,6 +155,7 @@
 				964E4EF210FA8058007B3112 /* IOKit.framework in Frameworks */,
 				F59400051UTIFW /* UniformTypeIdentifiers.framework in Frameworks */,
 				F59400071SMFW /* ServiceManagement.framework in Frameworks */,
+				F594D1030000000000000003 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -308,6 +310,9 @@
 			name = DiskArbitrator;
 			productInstallPath = "$(HOME)/Applications";
 			productName = DiskArbitrator;
+			packageProductDependencies = (
+				F594D1020000000000000002 /* Sparkle */,
+			);
 			productReference = 8D1107320486CEB800E47090 /* Disk Arbitrator.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -330,6 +335,9 @@
 			);
 			mainGroup = 29B97314FDCFA39411CA2CEA /* DiskArbitrator */;
 			projectDirPath = "";
+			packageReferences = (
+				F594D1010000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			projectRoot = "";
 			targets = (
 				8D1107260486CEB800E47090 /* DiskArbitrator */,
@@ -519,12 +527,17 @@
 				GCC_PREFIX_HEADER = Source/DiskArbitrator_Prefix.pch;
 				INFOPLIST_FILE = "Resources/DiskArbitrator-Info.plist";
 				INSTALL_PATH = "$(HOME)/Applications";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = "us.burghardt.Disk-Arbitrator";
 				PRODUCT_NAME = "Disk Arbitrator";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SU_PUBLIC_ED_KEY = "";
 			};
 			name = Debug;
 		};
@@ -546,18 +559,24 @@
 				GCC_PREFIX_HEADER = Source/DiskArbitrator_Prefix.pch;
 				INFOPLIST_FILE = "Resources/DiskArbitrator-Info.plist";
 				INSTALL_PATH = "$(HOME)/Applications";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = "us.burghardt.Disk-Arbitrator";
 				PRODUCT_NAME = "Disk Arbitrator";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SU_PUBLIC_ED_KEY = "";
 			};
 			name = Release;
 		};
 		C01FCF4F08A954540054247B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_COMMA = YES;
@@ -605,6 +624,7 @@
 		C01FCF5008A954540054247B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_COMMA = YES;
@@ -678,6 +698,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F594D1010000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F594D1020000000000000002 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F594D1010000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 29B97313FDCFA39411CA2CEA /* Project object */;
 }
