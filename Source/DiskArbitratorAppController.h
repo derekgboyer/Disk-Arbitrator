@@ -48,6 +48,7 @@ BOOL DiskArbitratorSparkleUpdatesConfigured(void);
 - (IBAction)performEject:(id)sender;
 - (IBAction)performGetInfo:(id)sender;
 - (IBAction)performAttachDiskImage:(id)sender;
+- (IBAction)copyDiskDetails:(id)sender;
 
 - (void)refreshLaunchAgentStatus;
 - (IBAction)installUserLaunchAgent:(id)sender;

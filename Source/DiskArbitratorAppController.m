@@ -19,8 +19,14 @@
 #import "SettingsWindowController.h"
 #import <ServiceManagement/ServiceManagement.h>
 #import <Sparkle/Sparkle.h>
+#import <DiskArbitration/DiskArbitration.h>
 #include <unistd.h>
 #include <errno.h>
+#include <string.h>
+#include <sys/proc.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#include <sys/xattr.h>
 
 static NSString * const LaunchAgentPlistName = @"us.burghardt.Disk-Arbitrator.plist";
 static NSString * const LaunchAgentLabel = @"us.burghardt.Disk-Arbitrator";
@@ -49,9 +55,53 @@ BOOL DiskArbitratorSparkleUpdatesConfigured(void)
 		&& DiskArbitratorSparkleInfoStringIsConfigured(DiskArbitratorSparkleInfoString(@"SUPublicEDKey"));
 }
 
+static NSString * const DAApplicationsBundlePath = @"/Applications/Disk Arbitrator.app";
+
+// Xcode sets P_TRACED while a debug session is attached. Skip the launch-location
+// warning in that case so a breakpoint does not turn into a move dialog.
+static BOOL DiskArbitratorProcessIsBeingDebugged(void)
+{
+	struct kinfo_proc info;
+	size_t size = sizeof(info);
+	int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid() };
+	memset(&info, 0, sizeof(info));
+	if (sysctl(mib, 4, &info, &size, NULL, 0) != 0)
+		return NO;
+	return (info.kp_proc.p_flag & P_TRACED) != 0;
+}
+
+static BOOL DiskArbitratorShouldWarnAboutLaunchLocation(void)
+{
+	NSString *path = [[NSBundle mainBundle] bundlePath];
+	if (path.length == 0)
+		return NO;
+	path = [path stringByResolvingSymlinksInPath];
+
+	// DerivedData, an Xcode path, or an attached debugger is a development launch.
+	if ([path containsString:@"DerivedData"] || [path containsString:@"Xcode"] || DiskArbitratorProcessIsBeingDebugged())
+		return NO;
+
+	// Gatekeeper runs a quarantined app from a random AppTranslocation directory.
+	if ([path containsString:@"AppTranslocation"])
+		return YES;
+
+	NSString *standardized = path.stringByStandardizingPath.lowercaseString;
+	if ([standardized isEqualToString:DAApplicationsBundlePath.lowercaseString])
+		return NO;
+	if ([standardized isEqualToString:@"/applications"] || [standardized hasPrefix:@"/applications/"])
+		return NO;
+	return YES;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
-@interface AppController ()
+typedef NS_ENUM(NSInteger, DAApplicationsMoveOutcome) {
+	DAApplicationsMoveOutcomeCopied,
+	DAApplicationsMoveOutcomeCancelled,
+	DAApplicationsMoveOutcomeFailed
+};
+
+@interface AppController () <NSMenuDelegate>
 {
 	NSMutableArray *displayErrorQueue; //
 	NSMutableArray *diskInfoControllers;
@@ -59,6 +109,7 @@ BOOL DiskArbitratorSparkleUpdatesConfigured(void)
 }
 
 @property (strong) SPUStandardUpdaterController *updaterController;
+@property (assign) BOOL applicationLaunchDidContinue;
 
 @end
 
@@ -161,6 +212,19 @@ BOOL DiskArbitratorSparkleUpdatesConfigured(void)
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
+	// The login item is registered against this bundle. A DMG or translocated copy
+	// stops matching after the volume goes away, so offer to move before startup continues.
+	if ([self promptToMoveApplicationToApplicationsFolder])
+		return;
+	[self continueApplicationLaunch];
+}
+
+- (void)continueApplicationLaunch
+{
+	if (self.applicationLaunchDidContinue)
+		return;
+	self.applicationLaunchDidContinue = YES;
+
 	[self refreshLaunchAgentStatus];
 	
 	NSMutableDictionary *defaults = [NSMutableDictionary dictionary];
@@ -222,6 +286,150 @@ BOOL DiskArbitratorSparkleUpdatesConfigured(void)
 		[window makeKeyAndOrderFront:self];
 
 	[self prepareUpdater];
+	[self installDiskDetailsMenus];
+}
+
+- (void)clearQuarantineOnCopiedAppAtURL:(NSURL *)bundleURL
+{
+	// Quarantine is optional to clear. A failure here must not undo a successful copy.
+	if (bundleURL.path.length == 0)
+		return;
+	NSMutableArray<NSString *> *paths = [NSMutableArray arrayWithObject:bundleURL.path];
+	NSDirectoryEnumerator *enumerator = [[NSFileManager defaultManager] enumeratorAtURL:bundleURL
+															 includingPropertiesForKeys:nil
+																				options:0
+																		   errorHandler:^BOOL(NSURL *url, NSError *error) {
+		return YES;
+	}];
+	for (NSURL *item in enumerator) {
+		if (item.path.length)
+			[paths addObject:item.path];
+	}
+	for (NSString *path in paths)
+		removexattr(path.fileSystemRepresentation, "com.apple.quarantine", XATTR_NOFOLLOW);
+}
+
+- (BOOL)presentApplicationsMoveFailure:(NSError *)error
+{
+	ActivateDiskArbitratorApp();
+	NSAlert *alert = [[NSAlert alloc] init];
+	alert.alertStyle = NSAlertStyleCritical;
+	alert.messageText = NSLocalizedString(@"Could not move Disk Arbitrator", nil);
+	NSString *reason = error.localizedDescription;
+	if (reason.length == 0)
+		reason = NSLocalizedString(@"The app could not be copied to /Applications.", nil);
+	alert.informativeText = reason;
+	[alert addButtonWithTitle:NSLocalizedString(@"Quit", nil)];
+	[alert addButtonWithTitle:NSLocalizedString(@"Continue", nil)];
+	return [alert runModal] == NSAlertFirstButtonReturn;
+}
+
+- (DAApplicationsMoveOutcome)copyRunningAppToApplications:(NSURL *__autoreleasing *)destinationURL error:(NSError **)error
+{
+	NSFileManager *files = [NSFileManager defaultManager];
+	NSURL *sourceURL = [NSBundle mainBundle].bundleURL;
+	NSURL *applicationsURL = [NSURL fileURLWithPath:DAApplicationsBundlePath isDirectory:YES];
+	if (destinationURL)
+		*destinationURL = applicationsURL;
+
+	if (sourceURL.path.length == 0) {
+		if (error)
+			*error = [NSError errorWithDomain:AppErrorDomain code:1 userInfo:@{NSLocalizedDescriptionKey: NSLocalizedString(@"The running app bundle could not be found.", nil)}];
+		return DAApplicationsMoveOutcomeFailed;
+	}
+
+	NSString *sourcePath = sourceURL.path.stringByResolvingSymlinksInPath.stringByStandardizingPath;
+	NSString *destinationPath = applicationsURL.path.stringByStandardizingPath;
+	if (sourcePath.length && [sourcePath caseInsensitiveCompare:destinationPath] == NSOrderedSame)
+		return DAApplicationsMoveOutcomeCancelled;
+
+	BOOL destinationExists = [files fileExistsAtPath:applicationsURL.path];
+	if (destinationExists) {
+		NSAlert *replace = [[NSAlert alloc] init];
+		replace.alertStyle = NSAlertStyleWarning;
+		replace.messageText = NSLocalizedString(@"Replace the Applications copy?", nil);
+		replace.informativeText = NSLocalizedString(@"/Applications/Disk Arbitrator.app already exists. Replace it with the app you just opened?", nil);
+		[replace addButtonWithTitle:NSLocalizedString(@"Replace", nil)];
+		[replace addButtonWithTitle:NSLocalizedString(@"Cancel", nil)];
+		if ([replace runModal] != NSAlertFirstButtonReturn)
+			return DAApplicationsMoveOutcomeCancelled;
+	}
+
+	NSURL *temporaryURL = [NSURL fileURLWithPath:@"/Applications/Disk Arbitrator.app.installing" isDirectory:YES];
+	[files removeItemAtURL:temporaryURL error:NULL];
+	if (![files copyItemAtURL:sourceURL toURL:temporaryURL error:error])
+		return DAApplicationsMoveOutcomeFailed;
+
+	[self clearQuarantineOnCopiedAppAtURL:temporaryURL];
+
+	if (destinationExists && ![files removeItemAtURL:applicationsURL error:error]) {
+		[files removeItemAtURL:temporaryURL error:NULL];
+		return DAApplicationsMoveOutcomeFailed;
+	}
+	if (![files moveItemAtURL:temporaryURL toURL:applicationsURL error:error]) {
+		// If the old Applications copy is already gone, keep the .installing bundle.
+		if (!destinationExists)
+			[files removeItemAtURL:temporaryURL error:NULL];
+		return DAApplicationsMoveOutcomeFailed;
+	}
+	[self clearQuarantineOnCopiedAppAtURL:applicationsURL];
+	return DAApplicationsMoveOutcomeCopied;
+}
+
+- (void)relaunchCopiedApplicationAtURL:(NSURL *)url
+{
+	NSWorkspaceOpenConfiguration *configuration = [NSWorkspaceOpenConfiguration configuration];
+	configuration.createsNewApplicationInstance = YES;
+	configuration.activates = YES;
+	[[NSWorkspace sharedWorkspace] openApplicationAtURL:url
+										  configuration:configuration
+									  completionHandler:^(NSRunningApplication *app, NSError *error) {
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if (app && !error) {
+				[NSApp terminate:nil];
+				return;
+			}
+			if ([self presentApplicationsMoveFailure:error]) {
+				[NSApp terminate:nil];
+				return;
+			}
+			[self continueApplicationLaunch];
+		});
+	}];
+}
+
+- (BOOL)promptToMoveApplicationToApplicationsFolder
+{
+	if (!DiskArbitratorShouldWarnAboutLaunchLocation())
+		return NO;
+
+	ActivateDiskArbitratorApp();
+	NSAlert *alert = [[NSAlert alloc] init];
+	alert.alertStyle = NSAlertStyleWarning;
+	alert.messageText = NSLocalizedString(@"Move Disk Arbitrator to the Applications folder", nil);
+	alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"Disk Arbitrator is running from %@.\n\nThe login item cannot keep finding the app when it is opened from a disk image, a download, or an App Translocation folder. Move it to /Applications, or quit.", nil), [NSBundle mainBundle].bundlePath];
+	[alert addButtonWithTitle:NSLocalizedString(@"Move to Applications", nil)];
+	[alert addButtonWithTitle:NSLocalizedString(@"Quit", nil)];
+	if ([alert runModal] != NSAlertFirstButtonReturn) {
+		[NSApp terminate:nil];
+		return YES;
+	}
+
+	NSError *error = nil;
+	NSURL *destinationURL = nil;
+	DAApplicationsMoveOutcome outcome = [self copyRunningAppToApplications:&destinationURL error:&error];
+	if (outcome == DAApplicationsMoveOutcomeCancelled)
+		return NO;
+	if (outcome != DAApplicationsMoveOutcomeCopied) {
+		if ([self presentApplicationsMoveFailure:error]) {
+			[NSApp terminate:nil];
+			return YES;
+		}
+		return NO;
+	}
+
+	[self relaunchCopiedApplicationAtURL:destinationURL];
+	return YES;
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification
@@ -324,6 +532,8 @@ BOOL DiskArbitratorSparkleUpdatesConfigured(void)
 		return self.arbitrator.isActivated;
 	if (menuItem.action == @selector(performSetMountBlockMode:) || menuItem.action == @selector(performSetMountReadOnlyMode:))
 		return self.arbitrator.isActivated;
+	if (menuItem.action == @selector(copyDiskDetails:))
+		return [self diskForDetailsMenuItem:menuItem] != nil;
 	if (menuItem.action == @selector(performEject:))
 		return self.canEjectSelectedDisk;
 	if (menuItem.action == @selector(performMount:))
@@ -702,6 +912,138 @@ BOOL DiskArbitratorSparkleUpdatesConfigured(void)
 		return [disksArrayController.arrangedObjects objectAtIndex:indexes.lastIndex];
 	else
 		return nil;
+}
+
+- (NSMenuItem *)copyDiskDetailsMenuItem
+{
+	NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Copy Disk Details", nil)
+												  action:@selector(copyDiskDetails:)
+										   keyEquivalent:@""];
+	item.target = self;
+	return item;
+}
+
+- (void)installDiskDetailsMenus
+{
+	NSMenu *contextMenu = [[NSMenu alloc] initWithTitle:@""];
+	contextMenu.delegate = self;
+	[contextMenu addItem:[self copyDiskDetailsMenuItem]];
+	self.tableView.menu = contextMenu;
+
+	NSMenu *editMenu = [[[NSApp mainMenu] itemWithTitle:@"Edit"] submenu];
+	if (!editMenu)
+		return;
+	if ([editMenu indexOfItemWithTarget:self andAction:@selector(copyDiskDetails:)] != NSNotFound)
+		return;
+
+	NSMenuItem *editItem = [self copyDiskDetailsMenuItem];
+	NSInteger copyIndex = [editMenu indexOfItemWithTarget:nil andAction:@selector(copy:)];
+	if (copyIndex == NSNotFound)
+		[editMenu addItem:editItem];
+	else
+		[editMenu insertItem:editItem atIndex:copyIndex + 1];
+}
+
+- (void)menuNeedsUpdate:(NSMenu *)menu
+{
+	if (menu != self.tableView.menu)
+		return;
+	NSInteger row = self.tableView.clickedRow;
+	if (row < 0 || row >= (NSInteger)self.tableView.numberOfRows)
+		return;
+	[self.tableView selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)row] byExtendingSelection:NO];
+}
+
+- (Disk *)diskForDetailsMenuItem:(NSMenuItem *)menuItem
+{
+	if (menuItem.menu == self.tableView.menu) {
+		NSInteger row = self.tableView.clickedRow;
+		NSArray *disks = self.disksArrayController.arrangedObjects;
+		if (row >= 0) {
+			if (row < (NSInteger)disks.count)
+				return [disks objectAtIndex:(NSUInteger)row];
+			return nil;
+		}
+	}
+	return self.selectedDisk;
+}
+
+- (NSString *)diskDetailLineWithLabel:(NSString *)label value:(NSString *)value
+{
+	NSString *shown = [value isKindOfClass:[NSString class]] ? [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] : @"";
+	if (shown.length == 0)
+		shown = @"unavailable";
+	return [NSString stringWithFormat:@"%@: %@", label, shown];
+}
+
+- (NSString *)serialNumberForDisk:(Disk *)disk
+{
+	// Source/Disk.h has no serial property, and Disk Arbitration does not define a serial key.
+	// Use a description value when one is present under a serial key. An empty or missing value
+	// is reported as unavailable instead of dropping the line.
+	NSDictionary *description = disk.diskDescription;
+	for (id key in description) {
+		if (![key isKindOfClass:[NSString class]])
+			continue;
+		if ([[(NSString *)key lowercaseString] rangeOfString:@"serial"].location == NSNotFound)
+			continue;
+		NSString *serial = DAStringFromDescriptionValue(description[key]);
+		if (serial.length)
+			return serial;
+	}
+	return nil;
+}
+
+- (NSString *)sizeTextForDisk:(Disk *)disk
+{
+	id sizeValue = disk.diskDescription[(NSString *)kDADiskDescriptionMediaSizeKey];
+	if (![sizeValue isKindOfClass:[NSNumber class]])
+		return nil;
+	double bytes = [(NSNumber *)sizeValue doubleValue];
+	if (bytes < 0)
+		return nil;
+
+	NSString *pretty;
+	if (bytes >= 1000000000000.0)
+		pretty = [NSString stringWithFormat:@"%.2f TB", bytes / 1000000000000.0];
+	else if (bytes >= 1000000000.0)
+		pretty = [NSString stringWithFormat:@"%.2f GB", bytes / 1000000000.0];
+	else if (bytes >= 1000000.0)
+		pretty = [NSString stringWithFormat:@"%.2f MB", bytes / 1000000.0];
+	else if (bytes >= 1000.0)
+		pretty = [NSString stringWithFormat:@"%.2f KB", bytes / 1000.0];
+	else
+		pretty = [NSString stringWithFormat:@"%.0f bytes", bytes];
+	return [NSString stringWithFormat:@"%@ (%.0f bytes)", pretty, bytes];
+}
+
+- (NSString *)plainTextDetailsForDisk:(Disk *)disk
+{
+	NSDictionary *description = disk.diskDescription;
+	NSString *volumeName = DAStringFromDescriptionValue(description[(NSString *)kDADiskDescriptionVolumeNameKey]);
+	NSString *fileSystem = DAStringFromDescriptionValue(description[(NSString *)kDADiskDescriptionVolumeKindKey]);
+	NSArray<NSString *> *lines = @[
+		[self diskDetailLineWithLabel:@"BSD name" value:disk.BSDName],
+		[self diskDetailLineWithLabel:@"Volume name" value:volumeName],
+		[self diskDetailLineWithLabel:@"Volume UUID" value:DAVolumeUUIDForDisk(disk)],
+		[self diskDetailLineWithLabel:@"Media UUID" value:DAMediaUUIDForDisk(disk)],
+		[self diskDetailLineWithLabel:@"Serial number" value:[self serialNumberForDisk:disk]],
+		[self diskDetailLineWithLabel:@"Size" value:[self sizeTextForDisk:disk]],
+		[self diskDetailLineWithLabel:@"Filesystem" value:fileSystem]
+	];
+	return [lines componentsJoinedByString:@"\n"];
+}
+
+- (IBAction)copyDiskDetails:(id)sender
+{
+	NSMenuItem *menuItem = [sender isKindOfClass:[NSMenuItem class]] ? sender : nil;
+	Disk *disk = [self diskForDetailsMenuItem:menuItem];
+	if (!disk)
+		return;
+
+	NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+	[pasteboard clearContents];
+	[pasteboard setString:[self plainTextDetailsForDisk:disk] forType:NSPasteboardTypeString];
 }
 
 - (BOOL)canEjectSelectedDisk

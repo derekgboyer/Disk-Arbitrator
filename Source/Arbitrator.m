@@ -208,24 +208,34 @@
 - (BOOL)activate
 {
 	BOOL success;
+	BOOL wasActivated = self.isActivated;
 	
 	[self willChangeValueForKey:@"isActivated"];
 	success = [self registerApprovalSession];
 	[[NSUserDefaults standardUserDefaults] setBool:YES forKey:ArbitratorIsEnabled];
-	[self didChangeValueForKey:@"isActivated"];	
+	[self didChangeValueForKey:@"isActivated"];
+
+	// Log the transition only. A second activate while the session is already up is not a new mode.
+	if (success && !wasActivated)
+		[[AuditLog sharedLog] recordModeChange:@"activated"];
 	
 	return success;
 }
 
 - (void)deactivate
 {
+	BOOL wasActivated = self.isActivated;
+
 	for (Disk *disk in disks)
 		[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(mountApprovedDisk:) object:disk];
 
 	[self willChangeValueForKey:@"isActivated"];
 	[self unregisterApprovalSession];
 	[[NSUserDefaults standardUserDefaults] setBool:NO forKey:ArbitratorIsEnabled];
-	[self didChangeValueForKey:@"isActivated"];	
+	[self didChangeValueForKey:@"isActivated"];
+
+	if (wasActivated)
+		[[AuditLog sharedLog] recordModeChange:@"deactivated"];
 }
 
 - (BOOL)isActivated
@@ -246,12 +256,28 @@
 	return [[NSUserDefaults standardUserDefaults] integerForKey:ArbitratorMountMode];
 }
 
+- (void)recordMountModeChangeFrom:(NSInteger)previous to:(NSInteger)mountMode
+{
+	// One entry for each mode that actually flipped. Switching block to read-only is
+	// "blocking off" and "read-only on", not a refresh of the window.
+	if (previous == MM_BLOCK && mountMode != MM_BLOCK)
+		[[AuditLog sharedLog] recordModeChange:@"blocking off"];
+	else if (previous != MM_BLOCK && mountMode == MM_BLOCK)
+		[[AuditLog sharedLog] recordModeChange:@"blocking on"];
+
+	if (previous == MM_READONLY && mountMode != MM_READONLY)
+		[[AuditLog sharedLog] recordModeChange:@"read-only off"];
+	else if (previous != MM_READONLY && mountMode == MM_READONLY)
+		[[AuditLog sharedLog] recordModeChange:@"read-only on"];
+}
+
 - (void)setMountMode:(NSInteger)mountMode {
 	NSInteger currentMode = [[NSUserDefaults standardUserDefaults] integerForKey:ArbitratorMountMode];
 	if (currentMode != mountMode) {
 		[self willChangeValueForKey:@"mountMode"];
 		[[NSUserDefaults standardUserDefaults] setInteger:mountMode forKey:ArbitratorMountMode];
 		[self didChangeValueForKey:@"mountMode"];
+		[self recordMountModeChangeFrom:currentMode to:mountMode];
 	}
 }
 
