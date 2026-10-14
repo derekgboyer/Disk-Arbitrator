@@ -151,6 +151,8 @@ jobs:
           if [ -f LICENSE ]; then
             cp LICENSE "$STAGE/"
           fi
+          cp README.markdown "$STAGE/README.md"
+          cp ReleaseNotes.markdown "$STAGE/ReleaseNotes.md"
           hdiutil create -volname "Disk Arbitrator" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
           if [ "${{ steps.sign.outputs.mode }}" = "developer-id" ]; then
             codesign --force --sign "${{ steps.sign.outputs.identity }}" --timestamp "$DMG"
@@ -168,12 +170,18 @@ jobs:
           SOURCE_TGZ="$DIST/Disk-Arbitrator-${VERSION}-source.tar.gz"
           git archive --format=zip --prefix="Disk Arbitrator ${VERSION}/" -o "$SOURCE_ZIP" "${GITHUB_SHA}"
           git archive --format=tar.gz --prefix="Disk Arbitrator ${VERSION}/" -o "$SOURCE_TGZ" "${GITHUB_SHA}"
+          README_MD="$DIST/README.md"
+          NOTES_MD="$DIST/ReleaseNotes.md"
+          cp README.markdown "$README_MD"
+          cp ReleaseNotes.markdown "$NOTES_MD"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
           echo "source_zip=$SOURCE_ZIP" >> "$GITHUB_OUTPUT"
           echo "source_tgz=$SOURCE_TGZ" >> "$GITHUB_OUTPUT"
+          echo "readme=$README_MD" >> "$GITHUB_OUTPUT"
+          echo "release_notes=$NOTES_MD" >> "$GITHUB_OUTPUT"
 
       - name: Build Sparkle appcast
         env:
@@ -277,6 +285,8 @@ jobs:
             "${{ steps.package.outputs.dmg }}"
             "${{ steps.package.outputs.source_zip }}"
             "${{ steps.package.outputs.source_tgz }}"
+            "${{ steps.package.outputs.readme }}"
+            "${{ steps.package.outputs.release_notes }}"
             "${RUNNER_TEMP}/dist/appcast.xml"
           )
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
